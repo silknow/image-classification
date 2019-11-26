@@ -931,6 +931,15 @@ def add_evaluation_step_MTL(result_tensor, ground_truth_tensor, class_count_dict
     prediction_perMTL_inc   = tuple(prediction_perMTL_inc)
     ground_truth_perMTL_inc = tuple(ground_truth_perMTL_inc)
     
+#    prediction_perMTL = tf.identity(prediction_perMTL, name="prediction_perMTL")
+#    overall_acc_perMTL = tf.identity(overall_acc_perMTL, name="overall_acc_perMTL")
+#    ground_truth_perMTL = tf.identity(ground_truth_perMTL, name="ground_truth_perMTL")
+#    prediction_perMTL_inc = tf.identity(prediction_perMTL_inc, name="prediction_perMTL_inc")
+#    ground_truth_perMTL_inc = tf.identity(ground_truth_perMTL_inc, name="ground_truth_perMTL_inc")
+#    prediction_all = tf.identity(prediction_all, name="prediction_all")
+#    ground_truth_all = tf.identity(ground_truth_all, name="ground_truth_all")
+#    correct_prediction_complete = tf.identity(correct_prediction_complete, name="correct_prediction_complete")
+    
     return (prediction_perMTL, overall_acc_perMTL,
             prediction_all, overall_acc_all, ground_truth_all, ground_truth_perMTL,
             prediction_perMTL_inc, ground_truth_perMTL_inc, correct_prediction_complete)
@@ -1409,22 +1418,42 @@ def import_control_file_train(control_file_name):
     """
     
     control_id = open(control_file_name, 'r',encoding='utf-8')
-    bool_split_train_val = False
-    validation_percentage = None
-    num_joint_fc_layer = 0
-    num_nodes_joint_fc = 0
-    nodes_prop_2_num_tasks = False
-    min_samples_per_class = -1
-    bottleneck_dir = -1
-    weight_decay = 0
-    aug_set_dict = {}
-    output_graph = -1
+    
+    """FILES AND DIRECTORIES"""
+    output_labels = r"output_labels.txt"
+    logpath = r"trained_model/"
+    result_folder_name = r"results/"
+    
+    """SPECIFICATIONS FOR TRAINING"""
+    train_batch_size = 30
+    how_many_training_steps = 0 #so it does not need to be set in evaluation case
     learning_rate = 1e-4
-    how_many_training_steps = 0
+    labels_2_learn = ['place', 'material', 'technique', 'depiction', 'timespan'] 
+    min_samples_per_class = -1
+    bool_split_train_val = False
+    validation_percentage = 25
     bool_CrossVal = False
-    how_often_validation = 1
-    output_labels = -1
+    how_often_validation = 10
+    weight_decay = 0
     evaluate_model = True
+    
+    """SPECIFICATIONS FOR ARCHITECTURE"""
+    tfhub_module = "https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1"
+    num_joint_fc_layer = 1
+    num_nodes_joint_fc = 1500
+    nodes_prop_2_num_tasks = False
+    num_finetune_layers = 2
+    num_task_stop_gradient = -1
+    crop_aspect_ratio = 100
+    min_num_labels = 0
+    
+    
+    aug_set_dict = {"flip_left_right": True,
+                    "flip_up_down": True,
+                    "random_rotation90": True}
+    
+    bottleneck_dir = -1
+    output_graph = -1
     for variable in control_id:
         if variable.split(';')[0] == 'master_file_name':
             master_file_name = variable.split(';')[1].strip()
@@ -1505,6 +1534,7 @@ def import_control_file_train(control_file_name):
             evaluate_model = variable.split(';')[1].strip()
             if evaluate_model == 'False':
                 evaluate_model = False
+                print("No evaluation will be carried out!")
             else:
                 evaluate_model = True
             
@@ -1761,16 +1791,18 @@ def train_CNN_Classifier(control_file_name):
 
                     
                     # Create the operations we need to evaluate the accuracy of our new layer.
-                    (prediction_perMTL, overall_acc_perMTL,
-                    prediction_all, overall_acc_all,
-                    ground_truth_all,
-                    ground_truth_perMTL,
-                    prediction_perMTL_inc, 
-                    ground_truth_perMTL_inc, 
-                    correct_prediction_complete) = add_evaluation_step_MTL(
-                                                                 final_tensor,
-                                                                 ground_truth_input,
-                                                                 class_count_dict)
+                    with tf.variable_scope("evaluationLayers") as scope:
+                        (prediction_perMTL, overall_acc_perMTL,
+                        prediction_all, overall_acc_all,
+                        ground_truth_all,
+                        ground_truth_perMTL,
+                        prediction_perMTL_inc, 
+                        ground_truth_perMTL_inc, 
+                        correct_prediction_complete) = add_evaluation_step_MTL(
+                                                                     final_tensor,
+                                                                     ground_truth_input,
+                                                                     class_count_dict)
+                        
                     # Merge all the summaries and write them out to the logpath
                     merged = tf.summary.merge_all()
                     train_writer = tf.summary.FileWriter(
@@ -2609,6 +2641,7 @@ class ImportGraph():
             saver.restore(self.sess, loc + CHECKPOINT_NAME)
             self.task_list = task_list
             self.output_operations = [self.graph.get_operation_by_name('customLayers/'+output_name+'_'+task).outputs[0] for task in task_list]
+            self.eval_operations   = [self.graph.get_operation_by_name]
 
     def run(self, data):
         """ Running the activation operation previously imported.
@@ -2628,6 +2661,30 @@ class ImportGraph():
         output = self.sess.run(self.output_operations, feed_dict=feed_dict)
         return output
     
+#    def evaluate(self, data):
+#        """ Running the activation operation previously imported.
+#        
+#        :Arguments:
+#            :data:
+#                The image data, i.e. the output from read_tensor_from_image_file.
+#                
+#        :Returns:
+#            :output:
+#                The result of the specified layer (output_name).
+#        """
+#        
+#        (test_pred_perMTL_, test_pred_all_,
+#         test_gt_perMTL_, test_gt_all_,
+#         test_pred_perMTL_inc_, 
+#         test_gt_perMTL_inc_,
+#         test_correct_pred_comp_) = sess.run([prediction_perMTL,
+#                                         prediction_all,
+#                                         ground_truth_perMTL,
+#                                         ground_truth_all,
+#                                         prediction_perMTL_inc, 
+#                                         ground_truth_perMTL_inc,
+#                                         correct_prediction_complete],
+#                                         feed_dict=feed_dictionary)
 
 def apply_CNN_Classifier(control_file_name):
     """Applies the trained classifier to new data.
@@ -2766,6 +2823,11 @@ def import_control_file_apply(control_file_name):
             have been considered during training, too. Task names should begin
             with a # and be separated by commas, e.g. '#timespan, #place'
     """
+    
+    # Default Values
+    tfhub_module = "https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1"
+    task_list    = ['place', 'material', 'technique', 'depiction', 'timespan'] 
+    
     control_id = open(control_file_name, 'r',encoding='utf-8')
     for variable in control_id:
         if variable.split(';')[0] == 'master_file_name':
@@ -2809,7 +2871,7 @@ def main(application, controlFile):
     
     """
     # Zwei Bilder in unterschiedlichen collections.txt dürfen aktuell nicht denselben Dateinamen haben!!!
-    if application == 'apply':
+    if application == 'classification':
         print("Commencing with application of trained model.")
         apply_CNN_Classifier(controlFile)
     elif application == 'evaluation':
@@ -2821,7 +2883,7 @@ def main(application, controlFile):
     else:
         print(application, controlFile)
         print("Incorrect use of parameters! \n",
-              "The first parameter must be 'apply', 'evaluation' or 'training'. \n",
+              "The first parameter must be 'classification', 'evaluation' or 'training'. \n",
               "The second parameter must be the relative path to a control file.")
         
     

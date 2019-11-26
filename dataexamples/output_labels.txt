@@ -1,0 +1,5 @@
+place; #Africa #Asia #ES #IR #IT #Other_Places
+material; #Metal_Thread #Other_Material #Silk
+technique; #Brocading #Brocatelle #Damask #Embroidering #Other_Technique #Patterned_Fabric
+depiction; #Bands_Arrangement #Birds #Bouquets # Floral_Patterns #Other_Depiction #Plant_Motifs
+timespan; #16th_c. #17th_c. #18th_c. #19th_c. #20th_c.

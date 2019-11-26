@@ -39,8 +39,9 @@ docs/_build
 # Cookiecutter
 output/
 
-dataexamples/*.csv
-dataexamples/*.xlsx
+dataexamples/dataset_creation/
+dataexamples/dummy_results/
+dataexamples/modelfile/
 build/
 dist/
 docs/

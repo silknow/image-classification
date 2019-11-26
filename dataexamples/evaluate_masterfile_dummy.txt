@@ -1,0 +1,1 @@
+evaluate_collectionfile_dummy.txt

@@ -102,7 +102,7 @@ def LoadAndMap(FieldCSV, Mapping_table, csvPath=""):
     if fieldname == "timespan":
         data.timespan = data.timespan.replace(r'Other_Timespan', 'NaN')
     
-    data.to_csv(fieldname+"_cleaned.csv")
+    data.to_csv(csvPath+fieldname+"_cleaned.csv")
     
     return data
 
@@ -221,7 +221,7 @@ def CreateDataset(ImageCSV, FieldCSV_list, Mapping_table, imagePath, collections
         image_data = pd.merge(image_data, data, left_index=True, right_index=True)
     
     # save merged dataframe, might contain dead links
-    image_data.to_csv(r"dataset_cleaned_deadlinks.csv")
+    image_data.to_csv(csvPath+"dataset_cleaned_deadlinks.csv")
     
     if not skipDownload:
         downloadNewImages(image_data, imagePath)
@@ -244,9 +244,9 @@ def CreateDataset(ImageCSV, FieldCSV_list, Mapping_table, imagePath, collections
     
     # Save dataset as .csv
     if not onlyFromCollection == "":
-        image_data.to_csv(r"dataset_cleaned_"+onlyFromCollection+".csv")
+        image_data.to_csv(csvPath+"dataset_cleaned_"+onlyFromCollection+".csv")
     else:
-        image_data.to_csv(r"dataset_cleaned.csv")
+        image_data.to_csv(csvPath+"dataset_cleaned.csv")
     
     
     # Save dataset in five collection files, to be usable in MTL 
@@ -279,23 +279,17 @@ def CreateDataset(ImageCSV, FieldCSV_list, Mapping_table, imagePath, collections
     
 
 if __name__ == '__main__':
-    ImageCSV = r"imagelinks.csv"
     FieldCSV_list = [r"depiction.csv",
                      r"material.csv",
                      r"place.csv",
                      r"technique.csv",
                      r"timespan.csv"]
-    Mapping_table = r"ClassMapping.xlsx"
-    imagePath = r"../images/"
-    collectionsPath = r"collections/"
+    imagePath = r"../../data/images/"
+    collectionsPath = r"../Master_dir_cleaned/"
     onlyFromCollection = "imatex"
-    csvPath = r"../tests/"
+    csvPath = r"../../data/"
+    Mapping_table = csvPath+r"ClassMapping.xlsx"
+    ImageCSV = csvPath+r"imagelinks.csv"
     CreateDataset(ImageCSV, FieldCSV_list, Mapping_table, imagePath, collectionsPath, csvPath,
                   onlyFromCollection=onlyFromCollection)
-    
-    
-    
-    
-
-    
     

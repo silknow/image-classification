@@ -1,7 +1,7 @@
 master_file_name; master_file_applyClassifier.txt
-master_dir; E:\Project\Develop\silknow\SILKNOW\Multi_Task_Learning\Code_Cross_Val_Paper
-model_file; E:\Project\Develop\silknow\SILKNOW\Multi_Task_Learning\model_data\logfiles\MTL_imatex_1\
-label_file; E:\Project\Develop\silknow\SILKNOW\Multi_Task_Learning\Code_Cross_Val_Paper\output_labels.txt
+master_dir; ..\dataexamples\
+model_file; ..\dataexamples\modelfile\
+label_file; ..\dataexamples\output_labels.txt
+classification_result; .\dummy_results\classification_result.txt
 tfhub_module; https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1
-classification_result; classification_result.txt
 task_list; #timespan, #technique, #place, #depiction, #material
