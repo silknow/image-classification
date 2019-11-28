@@ -1315,23 +1315,21 @@ def import_control_file_train(control_file_name):
         :bottleneck_dir (*string*)\::
             This variable has to be a string and contains the path to the
             storage location for the feature vectors. The path has to be
-            relative to the master_dir.
+            relative to the master_dir. Variable is deprecated and not used anymore.
         :train_batch_size (*int*)\::
             This variable is an int and says how many images shall be used for
-            the classifier's training.
-            
-            train_batch_size > 0:
-                The given number von samples will randomly picked out of all
-                given images in the collection.txt. Thereby, the different
-                classes will be represented by roughly an equal number of
-                samplesin the training.
-            train_batch_size == -1:
-                All given images in collection.txt will be used for training.
+            the classifier's training in one training iteration.
+            The given number von samples will randomly picked out of all
+            given images in the collection.txt. Thereby, the different
+            classes will be represented by roughly an equal number of
+            samplesin the training.
+            Default value is 30.
         :how_many_training_steps (*int*)\::
             An int specifying the number of training iterations.
         :learning_rate (*float*)\::
             A float specifying the learning rate of the Gradient-Descent-
             Optimizer.
+            Default value is 1e-4.
         :output_graph (*string*)\::
             A string specifying the absolute path including the name of the
             trained graph.
@@ -1339,7 +1337,8 @@ def import_control_file_train(control_file_name):
             This variable is a string specifying the absolute path including
             the name of the file that contains all class labels that can be
             predicted by the trained graph.
-        :labels_2_learn (*list*)\::
+            Default value is 'output_labels.txt'
+        :variables_to_learn (*list*)\::
             A list containing the collection.txt's header terms of the labels
             to be learnt. The terms must not contain blank spaces; use '_'
             instead of blank spaces!
@@ -1352,24 +1351,30 @@ def import_control_file_train(control_file_name):
             Example (string in control file): #timespan, #place
                 
             Example (according list): [timespan, place]
+            Default value is ['place', 'material', 'technique', 'depiction', 'timespan'] 
         :bool_MTL (*bool*)\::
             A boolean specifying if multiple task will be learnt together.
+            Variable is deprecated and not used anymore.
         :min_samples_per_class (*int*)\::
             An integer that specifies the minimum number of samples per class
             that are desired. If the number of samples is less, the class
             won't be considered in learning and the samples are rejected from
-            learning without data gaps.
+            learning without data gaps. 
+            Variable is deprecated and not used anymore.
         :logpath (*string*)\::
             The path where all summarized training information are stored.
+            Default value is 'trained_model/'
         :bool_split_train_val (*bool*)\::
             Can be True or False. If True: The given data will be split into
             a training set and a validation set. You have to chosse a
             percentage for the size of thevalidation set
             (validation_percentage)!
+            Default value is True.
         :validation_percentage (*int*):
             The amount of data that shall be used for validation instead of
             training. If the value is 20, 20% of the data will be used for
             validation and NOT for training.
+            Default value is 25.
         :bool_CrossVal (*bool*)\::
             If True, Cross Validation (cv) will be applied. Thereby, all files
             listed in the master.txt are assumed to provide roughly and equal
@@ -1379,42 +1384,59 @@ def import_control_file_train(control_file_name):
             respectively, if bool_split_train_val == True). In the end of each
             cv Iteartion, the trained classifier will be evaluated on the test
             set.
+            Default value is False.
         :num_nodes_joint_fc (*int*)\::
             The number of nodes that each joint fully connected layer will have
             in Multi-task learning. Has to be an even number.
+            Default value is 1.
         :nodes_prop_2_num_tasks (*bool*)\::
             If True, the num_nodes_joint_fc will be expanded if more than two
             tasks will be learnt. For each additional task, half of
             num_nodes_joint_fc nodes will be added to each joint
             fully-connected layer.
+            Default value is False
         :num_finetune_layers (*int*)\::
             Number of layers of the module graph that will be fine-tuned.
             If this is 0, the module will be used as a sole feature extractor.
             If this is 1, the last layer will be fine-tuned, etc.
+            Default value is 2.
         :num_task_stop_gradient (*int*)\::
             Samples, that have more than num_task_stop_gradient missing labels,
             will not contribute to the joined feature vector during training.
             If zero, only complete samples will contribute to the joint fc layer. 
             If negative, all samples will contribute to the joint fc layer.
+            Default value is -1.
         :crop_aspect_ratio (*float*)\::
-            If greater than 1, images will be cropped to their central square when their aspect ratio is
-            greater than crop_aspect_ratio. 
-            For example, an image with a height of 200 and a width of 400 has an aspect ratio of 2.
-            When crop_aspect_ratio is set to 1.5, the exemplary image will be cropped to the region
-            hmin=0 hmax=200 wmin=100 wmax=300.
+            Images will be cropped to their central square when their aspect ratio is
+            smaller than crop_aspect_ratio. 
+            For example, an image with a height of 200 and a width of 400 has an aspect ratio of 0.5.
+            When crop_aspect_ratio is set to 0.9, the exemplary image will be cropped to the region
+            hmin=0 hmax=200 wmin=100 wmax=300, as 0.5 < 0.9.
+            Default value is 1, which results in no cropping.
         :min_num_labels (*int*)\::
             Integer that defines the minimum number of labels that one sample
             must have. If min_labels is zero or negative, all samples are valid.
+            Default value is 0, which results in all samples being valid.
         :how_often_validation (*int*)\::
             Defines how often a validation is carried out. If this is 1, 
             a validation will be carried out after each training iteration, if it is 2, then
             after every second training iteration and so on.
-        :aug_set_dict: 
+            Default value is 10.
+        :aug_set_dict (*dict*)\:: 
             Dictionary that defines what types of data augmentation will be carried out.
-        :weight_decay: 
-            Scale factor for the L2-Loss
-        :evaluate_model:
+            Details on possible augmentations can be found in the documentation of the SILKNOW
+            WP4 Library in the function add_data_augmentation.
+            By default, horizontal flipping, vertical flipping and random rotation by 90°
+            are carried out.
+        :weight_decay (*float*)\:: 
+            Scale factor for the L2-Loss.
+            Default value is 1e-2.
+        :evaluate_model (*bool*)\::
             If True, the classifier will be evaluated after training.
+            Default value is True.
+        :bool_MTL (*bool*)\::
+            Used to indicate if multi task learning would be carried out.
+            Variable is deprecated and not used anymore.
     """
     
     control_id = open(control_file_name, 'r',encoding='utf-8')
@@ -1428,14 +1450,20 @@ def import_control_file_train(control_file_name):
     train_batch_size = 30
     how_many_training_steps = 0 #so it does not need to be set in evaluation case
     learning_rate = 1e-4
-    labels_2_learn = ['place', 'material', 'technique', 'depiction', 'timespan'] 
+    variables_to_learn = ['place', 'material', 'technique', 'depiction', 'timespan'] 
     min_samples_per_class = -1
-    bool_split_train_val = False
+    if how_many_training_steps == 0:
+        bool_split_train_val = False
+    else:
+        bool_split_train_val = True
     validation_percentage = 25
     bool_CrossVal = False
     how_often_validation = 10
-    weight_decay = 0
+    weight_decay = 1e-2
     evaluate_model = True
+    aug_set_dict = {"flip_left_right": True,
+                    "flip_up_down": True,
+                    "random_rotation90": True}
     
     """SPECIFICATIONS FOR ARCHITECTURE"""
     tfhub_module = "https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1"
@@ -1444,16 +1472,12 @@ def import_control_file_train(control_file_name):
     nodes_prop_2_num_tasks = False
     num_finetune_layers = 2
     num_task_stop_gradient = -1
-    crop_aspect_ratio = 100
+    crop_aspect_ratio = 1
     min_num_labels = 0
-    
-    
-    aug_set_dict = {"flip_left_right": True,
-                    "flip_up_down": True,
-                    "random_rotation90": True}
     
     bottleneck_dir = -1
     output_graph = -1
+    bool_MTL = True
     for variable in control_id:
         if variable.split(';')[0] == 'master_file_name':
             master_file_name = variable.split(';')[1].strip()
@@ -1477,11 +1501,11 @@ def import_control_file_train(control_file_name):
             output_graph = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'output_labels':
             output_labels = variable.split(';')[1].strip()
-        if variable.split(';')[0] == 'labels_2_learn':
-            labels_2_learn = variable.split(';')[1].replace(',', '')\
+        if variable.split(';')[0] == 'variables_to_learn':
+            variables_to_learn = variable.split(';')[1].replace(',', '')\
                         .replace(' ', '').replace('\n', '')\
                         .replace('\t', '').split('#')[1:]
-            print('The following labels shall be learnt:', labels_2_learn, '\n')
+            print('The following variables shall be considered during training:', variables_to_learn, '\n')
             bool_MTL = True
 #            print('Multitask learning will be realized:', bool_MTL, '\n')
         if variable.split(';')[0] == 'min_samples_per_class':
@@ -1543,7 +1567,7 @@ def import_control_file_train(control_file_name):
     
     return(master_file_name, master_dir, tfhub_module,
            bottleneck_dir, train_batch_size, how_many_training_steps, how_often_validation,
-           learning_rate, output_graph, output_labels, labels_2_learn,
+           learning_rate, output_graph, output_labels, variables_to_learn,
            bool_MTL, min_samples_per_class, logpath, bool_split_train_val,
            validation_percentage, result_folder_name, bool_CrossVal,
            num_joint_fc_layer, num_nodes_joint_fc, nodes_prop_2_num_tasks, 

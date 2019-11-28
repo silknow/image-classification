@@ -9,4 +9,3 @@ result_folder_name; .\dummy_results\
 ****************SPECIFICATIONS FOR Evaluation****************
 batch_size; 300
 labels_2_learn; #place, #material, #technique, #depiction, #timespan
-weight_decay; 1e-3

@@ -1,0 +1,17 @@
+SELECT DISTINCT ?g ?obj ?depiction
+WHERE {
+  GRAPH ?g {
+
+     ?dig a crmdig:D1_Digital_Object . }
+     ?dig  ecrm:P129_is_about ?img .
+
+      ?dig ecrm:P129_is_about ?obj .
+      ?obj a ecrm:E22_Man-Made_Object .
+      ?dig ecrm:P129_is_about ?prd .
+      ?obj  dc:identifier ?id .
+
+OPTIONAL { ?obj ecrm:P62_depicts ?depiction . }    
+
+
+
+}
