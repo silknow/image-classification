@@ -1,3 +1,0 @@
-#image_file	#place	#material	#technique	#depiction	#timespan	
-./images/imatex__0011654a-8ae5-30fa-bf48-ada9e2996e8c.jpg	ES	Silk	Patterned_Fabric	Floral_Patterns	19th_c.	
-./images/imatex__009e90ec-6cff-33a7-a833-c37096ae4f6d.jpg	ES	Silk	Brocading	Plant_Motifs	16th_c.	

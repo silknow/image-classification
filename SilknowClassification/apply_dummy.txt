@@ -1,7 +1,0 @@
-master_file_name; master_file_applyClassifier.txt
-master_dir; ..\dataexamples\
-model_file; ..\dataexamples\modelfile\
-label_file; ..\dataexamples\output_labels.txt
-classification_result; .\dummy_results\classification_result.txt
-tfhub_module; https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1
-task_list; #timespan, #technique, #place, #depiction, #material

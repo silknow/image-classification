@@ -1,0 +1,18 @@
+**************INPUT FILES AND PATH*****************
+InputDataPath; ./master_collection_images_csv/
+ImageCSV; imagelinks.csv
+FieldCSV; depiction.csv; depiction
+FieldCSV; material.csv; material
+FieldCSV; place.csv; place
+FieldCSV; technique.csv; technique
+FieldCSV; timespan.csv; timespan
+MappingTable; ClassMapping.xlsx
+
+**************PATH OF OUTPUT FILES*****************
+OutputDataPath; ./master_collection_images_csv/
+
+
+**************DATASET MISC*****************
+minNumSamples; 150
+skipDownload; True
+onlyFromCollection; imatex
