@@ -1,6 +1,6 @@
 ****************FILES AND DIRECTORIES**************** 
 master_file_name; Masterfile.txt
-master_dir; ./master_collection_images_csv/
+master_dir; ./samples/
 logpath; ./logfiles/CNN_Default/
 
 ****************TRAINING SPECIFICATIONS**************** 
@@ -13,7 +13,6 @@ weight_decay; 1e-2
 num_finetune_layers; 2
 
 ****************ARCHITECTURE SPECIFICATIONS**************** 
-tfhub_module; https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1
 num_joint_fc_layer; 1
 num_nodes_joint_fc; 1500
 
@@ -21,8 +20,9 @@ num_nodes_joint_fc; 1500
 flip_left_right; True
 flip_up_down; True
 random_rotation90; True
+gaussian_noise; 0.01
 
-****************CLASS STRUCTURE**************** 
+****************CLASSIFICATION BRANCHES**************** 
 variable_and_class; #depiction #Bands_Arrangement #Birds #Bouquets #Floral_Patterns #Plant_Motifs
 variable_and_class; #material #Metal_Thread #Silk
 variable_and_class; #place #Asia #ES #IR #IT
@@ -32,10 +32,10 @@ variable_and_class; #timespan #16th_c. #17th_c. #18th_c. #19th_c. #20th_c.
 ****************EVALUATION SPECIFICATIONS**************** 
 evaluation_result_path; ./evaluation_result/
 evaluation_master_file_name; Masterfile_Evaluation.txt
-evaluation_master_dir; ./master_collection_images_csv/
+evaluation_master_dir; ./samples/
 evaluation_index; 1
 
 ****************CLASSIFICATION SPECIFICATIONS**************** 
 classification_result_path; ./classification_result/
 classification_master_file_name; Masterfile_Classification.txt
-classification_master_dir; ./master_collection_images_csv/
+classification_master_dir; ./samples/

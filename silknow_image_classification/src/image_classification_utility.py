@@ -30,7 +30,7 @@ except:
         sys.path.insert(0,'./src') 
         import SILKNOW_WP4_library as wp4lib
     except:
-        print("SILKNOW WP4 Library could not be imported!")
+        import silknow_image_classification.src.SILKNOW_WP4_library as wp4lib
 MAX_NUM_IMAGES_PER_CLASS = 2 ** 27 - 1  # ~134M
 
 # The location where variable checkpoints will be stored.
@@ -491,6 +491,7 @@ def add_final_retrain_ops_MTL(class_count_dict, final_tensor_name, bottleneck_te
       number_jfc_nodes = num_nodes_joint_fc
   
   with tf.variable_scope("joint_layers_MTL"):
+      bottleneck_input = tf.nn.dropout(bottleneck_input, rate=0.1, name="dropout_layer")
       joint_fc = tf.layers.dense(inputs=bottleneck_input,
                                      units=number_jfc_nodes,
                                      use_bias=True,
@@ -652,7 +653,7 @@ def create_computation_graph(module_spec, num_finetune_layers, class_count_dict,
         with tf.variable_scope("moduleLayers") as scope:
             input_image_tensor = tf.placeholder(tf.float32, [None, height, width, 3], name="input_img") 
             m = hub.Module(module_spec)                                      
-            bottleneck_tensor = m(input_image_tensor)                             
+            bottleneck_tensor = m(input_image_tensor)                        
             wants_quantization = any(node.op in FAKE_QUANT_OPS                         
                                      for node in graph.as_graph_def().node)
         
@@ -1255,6 +1256,38 @@ def sort_out_incomplete_samples(collections_dict_MTL, image_2_label_dict, min_la
     
     return collections_dict_MTL_filtered, image_2_label_dict_filtered
 
+def import_CNNConfigurationFile(configfilename, configfilepath):
+    """
+    """
+    control_id = open(configfilepath+configfilename, 'r',encoding='utf-8')
+    variables_to_learn = []
+    task_dict = {}
+    for variable in control_id:
+        if variable.split(';')[0] == 'num_joint_fc_layer':
+            num_joint_fc_layer = int(variable.split(';')[1].strip())
+        if variable.split(';')[0] == 'num_nodes_joint_fc':
+            num_nodes_joint_fc = int(variable.split(';')[1].strip())
+            
+        # Every line defines one task and its class structure
+        if variable.split(';')[0] == 'variable_and_class':
+            variable_to_learn = variable.split(';')[1].replace(',', '')\
+                        .replace(' ', '').replace('\n', '')\
+                        .replace('\t', '').split('#')[1]
+            variables_to_learn.append(variable_to_learn)
+            
+        # Every line defines one task and its class structure
+        if variable.split(';')[0] == 'variable_and_class':
+            task = variable.split(';')[1].replace(',', '')\
+                        .replace(' ', '').replace('\n', '')\
+                        .replace('\t', '').split('#')[1]
+            classes = variable.split(';')[1].replace(',', '')\
+                        .replace(' ', '').replace('\n', '')\
+                        .replace('\t', '').split('#')[2:]
+            task_dict[task] = classes
+            
+    control_id.close()
+    
+    return num_joint_fc_layer, num_nodes_joint_fc, variables_to_learn, task_dict
 
 def import_control_file_train(control_file_name, bonus_parameters = {}):
     """Imports the information out of the control file.
@@ -1405,25 +1438,22 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
     result_folder_name = r"results/"
     
     """SPECIFICATIONS FOR TRAINING"""
-    train_batch_size = 300
+    train_batch_size = 1
     how_many_training_steps = 0 #so it does not need to be set in evaluation case
     learning_rate = 1e-4
-    variables_to_learn = ['depiction', 'material', 'place', 'technique', 'timespan'] 
-    default_variables = True
     min_samples_per_class = -1
     validation_percentage = 25
-    evaluation_index = 1
+    evaluation_index = -1
     how_often_validation = 10
     weight_decay = 1e-2
     evaluate_model = True
     aug_set_dict = {"flip_left_right": True,
                     "flip_up_down": True,
-                    "random_rotation90": True}
+                    "random_rotation90": True,
+                    "gaussian_noise": 0.01}
     
     """SPECIFICATIONS FOR ARCHITECTURE"""
     tfhub_module = "https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1"
-    num_joint_fc_layer = 1
-    num_nodes_joint_fc = 1500
     nodes_prop_2_num_tasks = False
     num_finetune_layers = 2
     num_task_stop_gradient = -1
@@ -1434,6 +1464,10 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
     output_graph = -1
     bool_MTL = True
     for variable in control_id:
+        if variable.split(';')[0] == 'cnn_config_file_name':
+            cnn_config_file_name = variable.split(';')[1].strip()
+        if variable.split(';')[0] == 'cnn_config_file_path':
+            cnn_config_file_path = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'master_file_name':
             master_file_name = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'master_dir':
@@ -1462,16 +1496,6 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
         if variable.split(';')[0] == 'output_graph':
             output_graph = variable.split(';')[1].strip()
             
-        # Every line defines one task and its class structure
-        if variable.split(';')[0] == 'variable_and_class':
-            if default_variables:
-                variables_to_learn = []
-                default_variables = False
-            variable_to_learn = variable.split(';')[1].replace(',', '')\
-                        .replace(' ', '').replace('\n', '')\
-                        .replace('\t', '').split('#')[1]
-            variables_to_learn.append(variable_to_learn)
-            
         if variable.split(';')[0] == 'min_samples_per_class':
             min_samples_per_class = np.int(variable.split(';')[1].strip())
         if variable.split(';')[0] == 'logpath':
@@ -1480,10 +1504,6 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
             validation_percentage = int(variable.split(';')[1].strip())
         if variable.split(';')[0] == 'evaluation_index':
             evaluation_index = int(variable.split(';')[1].strip())
-        if variable.split(';')[0] == 'num_joint_fc_layer':
-            num_joint_fc_layer = int(variable.split(';')[1].strip())
-        if variable.split(';')[0] == 'num_nodes_joint_fc':
-            num_nodes_joint_fc = int(variable.split(';')[1].strip())
         if variable.split(';')[0] == 'nodes_prop_2_num_tasks':
             nodes_prop_2_num_tasks = variable.split(';')[1].strip()
             if nodes_prop_2_num_tasks == 'True':
@@ -1504,15 +1524,18 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
             aug_set_dict["flip_up_down"] = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'random_rotation90':
             aug_set_dict["random_rotation90"] = variable.split(';')[1].strip()
+        if variable.split(';')[0] == 'gaussian_noise':
+            aug_set_dict["gaussian_noise"] = float(variable.split(';')[1].strip())
         if variable.split(';')[0] == 'weight_decay':
             weight_decay = np.float(variable.split(';')[1].strip())
             
-            
-        
     if evaluation_index == -1:
         evaluate_model = False
         
     control_id.close()
+    
+    num_joint_fc_layer, num_nodes_joint_fc, \
+    variables_to_learn, task_list = import_CNNConfigurationFile(cnn_config_file_name, cnn_config_file_path)
     
     return(master_file_name, master_dir, tfhub_module,
            bottleneck_dir, train_batch_size, how_many_training_steps, how_often_validation,
@@ -1521,7 +1544,7 @@ def import_control_file_train(control_file_name, bonus_parameters = {}):
            validation_percentage, result_folder_name, evaluation_index,
            num_joint_fc_layer, num_nodes_joint_fc, nodes_prop_2_num_tasks, 
            num_finetune_layers, num_task_stop_gradient,
-           crop_aspect_ratio, min_num_labels, aug_set_dict, weight_decay, evaluate_model)
+           crop_aspect_ratio, min_num_labels, aug_set_dict, weight_decay, evaluate_model, task_list)
 
 def read_tensor_from_image_file(file_name,
                                 input_height,
@@ -1589,7 +1612,11 @@ def image_lists_to_image_array(image_lists, master_dir):
     image_array = []
     for image_list in image_lists:
         im_id = open(os.path.join(master_dir, image_list).strip("\n"), 'r')
-        for im_line in im_id:
+        for line, im_line in enumerate(im_id):
+            
+            # skip header
+            if line == 0: continue
+            
             # Check if image is given as a file with path or via URL
             # Try to download when the file does not yet exist
             
@@ -1597,7 +1624,7 @@ def image_lists_to_image_array(image_lists, master_dir):
             if not os.path.isfile(master_dir+rel_im_path): 
                 # URL case
                 name = im_line.split('/')[-1].split('.')[0]
-                rel_im_path = var_dir+name+".jpg"
+                rel_im_path = var_dir+name+im_line.split('/')[-1].split('.')[1]
                 if not os.path.isfile(master_dir+rel_im_path): 
                     try:
                         urllib.request.urlretrieve(im_line, master_dir+rel_im_path)
@@ -1755,14 +1782,16 @@ def import_control_file_apply(control_file_name):
     
     control_id = open(control_file_name, 'r',encoding='utf-8')
     for variable in control_id:
+        if variable.split(';')[0] == 'cnn_config_file_name':
+            cnn_config_file_name = variable.split(';')[1].strip()
+        if variable.split(';')[0] == 'cnn_config_file_path':
+            cnn_config_file_path = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'classification_master_file_name':
             master_file_name = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'classification_master_dir':
             master_dir = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'logpath':
             modelpath = variable.split(';')[1].strip()
-        if variable.split(';')[0] == 'tfhub_module':
-            tfhub_module = variable.split(';')[1].strip()
 #        if variable.split(';')[0] == 'final_tensor_name':
 #            final_tensor_name = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'classification_result_path':
@@ -1772,21 +1801,591 @@ def import_control_file_apply(control_file_name):
 #                        .replace(' ', '').replace('\n', '')\
 #                        .replace('\t', '').split('#')[1:]
 #            print('The following labels shall be classified:', task_list, '\n')
-            
-        # Every line defines one task and its class structure
-        if variable.split(';')[0] == 'variable_and_class':
-            task = variable.split(';')[1].replace(',', '')\
-                        .replace(' ', '').replace('\n', '')\
-                        .replace('\t', '').split('#')[1]
-            classes = variable.split(';')[1].replace(',', '')\
-                        .replace(' ', '').replace('\n', '')\
-                        .replace('\t', '').split('#')[2:]
-            task_dict[task] = classes
     
     control_id.close()
+    _, _, \
+    _, task_dict = import_CNNConfigurationFile(cnn_config_file_name, cnn_config_file_path)
 
     return(master_file_name, master_dir, modelpath, 
            tfhub_module, classification_result_path, task_dict)
     
+def training_CNN_Classifier(configfile, bonus_parameters = {}):
+    """Trains a classifier based on top of a pre-trained CNN.
     
+    :Arguments\::
+        :configfile (*string*)\::
+            This variable is a string and contains the name of the configfile.
+            All relevant information for the training is in this file.
+            The configfile has to be stored in the same location as the
+            script executing the training function.
+        :bonus_parameters (*dict*)\::
+            Dictionary with parameters for internal handling of evaluation
+            and cross validation. Must not be defined manually.
+    
+    :Returns\::
+        No returns. The trained graph (containing the tfhub_module and the
+        trained classifier) is stored automatically in the directory given in
+        the control file.
+    """
+    # Feed master file information into variables
+    (master_file_name, master_dir, tfhub_module,
+     bottleneck_dir, train_batch_size,
+     how_many_training_steps, how_often_validation,
+     learning_rate,
+     output_graph, labels_2_learn,
+     bool_MTL, min_samples_per_class,
+     logpath,
+     validation_percentage, result_folder_name,
+     evaluation_index, num_joint_fc_layer,
+     num_nodes_joint_fc, nodes_prop_2_num_tasks, 
+     num_finetune_layers, num_task_stop_gradient,
+     crop_aspect_ratio, min_num_labels, aug_set_dict, 
+     weight_decay, evaluate_model, task_dict) = import_control_file_train(configfile, bonus_parameters)
+    final_tensor_name = 'final_result'
+    
+    
+    # Set parameters from bonus_parameters for call from evaluation function
+    if "how_many_training_steps" in bonus_parameters.keys(): how_many_training_steps = bonus_parameters["how_many_training_steps"]
+    if "bool_split_train_val" in bonus_parameters.keys(): bool_split_train_val = bonus_parameters["bool_split_train_val"]
+    if "evaluate_model" in bonus_parameters.keys(): evaluate_model = bonus_parameters["evaluate_model"]
+    if "callFromEvaluate" in bonus_parameters.keys(): 
+        evaluation_index = bonus_parameters["evaluation_index"]
+        callFromEvaluate = True
+    else:
+        callFromEvaluate = False
+    
+    # Set parameters from bonus_parameters for call from crossvalidation function
+    if "callFromCrossVal" in bonus_parameters.keys(): 
+        evaluation_index = bonus_parameters["evaluation_index"]
+        print('Current cv iteration:', evaluation_index)
+        bool_CrossVal = True
+    else:
+        bool_CrossVal = False
+        
+    # only carry out evaluation when called from evaluation or cross validation
+    if bool_CrossVal or callFromEvaluate:
+        evaluate_model = True
+    else:
+        evaluate_model = False
+        
+    # Handle CV index, if CV is carried out
+    cur_cv_iter = evaluation_index
+        
+        
+        
+    # Set deprecated parameters
+    bool_MTL = True
+    if validation_percentage > 0 and not how_many_training_steps == 0:
+        bool_split_train_val = True
+    else:
+        bool_split_train_val = False
+        
+        
+    # Get image_lists out of the Master.txt
+    # If an collection file is passed (header includes '#'), skip
+    master_id = open(os.path.abspath(master_dir + '/' + master_file_name), 'r')
+    collections_list = []
+    for line, collection in enumerate(master_id):
+        if "#" in collection and line==0 and callFromEvaluate:
+            collections_list.append(master_dir + '/' + master_file_name)
+            break
+        else:
+            collections_list.append(collection.strip())
+    master_id.close()
+    print('Got the following collections:', collections_list, '\n')
+
+    
+    
+    
+    # Select Training and Evaluation Data
+    if cur_cv_iter == -1:
+        # select all data for training
+        print("No evaluation will be carried out. All samples will be used for training.")
+        cur_collections_list_train = [collections_list]
+        cur_collections_list_test = []
+        evaluate_model = False
+        bool_CrossVal = False
+        
+    else:
+         # select each cv iteration another test set
+        cur_collections_list_test  = [collections_list[cur_cv_iter-1]]
+        cur_collections_list_train = []
+    
+        # all other collections are for training
+        for coll_list in collections_list:
+            if coll_list not in cur_collections_list_test:
+                cur_collections_list_train.append(coll_list)
+    collections_list_cv = cur_collections_list_train
+    
+    # convert the lists into an appropriate data structure
+    if not len(collections_list_cv) == 0:
+        (collections_dict_MTL,
+         image_2_label_dict) = wp4lib.collections_list_MTL_to_image_lists(
+                                             collections_list_cv,
+                                             labels_2_learn,
+                                             min_samples_per_class,
+                                             master_dir,
+                                             bool_CrossVal)
+    
+        (collections_dict_MTL,
+         image_2_label_dict) = sort_out_incomplete_samples(collections_dict_MTL, image_2_label_dict, min_num_labels)
+        
+        
+        print('\n\nTotal number of images provided for training:',
+              len(list(image_2_label_dict.keys())), '\n')
+        for im_label in collections_dict_MTL.keys():
+            print(im_label)
+            print(collections_dict_MTL[im_label].keys())
+            
+        # split the "training data" (not test) into training and
+        # validation data if a validation set is desired
+        if bool_split_train_val:
+            (collections_dict_MTL_train,
+             collections_dict_MTL_val,
+             image_2_label_dict_train,
+             image_2_label_dict_val
+             ) = split_collections_dict_MTL(collections_dict_MTL,
+                                            image_2_label_dict,
+                                            validation_percentage,
+                                            master_dir)
+            samplehandler = SampleHandler(len(image_2_label_dict_train.keys()), 
+                                          len(image_2_label_dict_val.keys()))
+        else:
+            samplehandler = SampleHandler(len(image_2_label_dict.keys()), 0)
+            
+            
+        # check if there is enough data provided
+        class_count_dict = {}
+        for im_label in collections_dict_MTL.keys():
+            temp_class_count = len(collections_dict_MTL[im_label].keys())
+            class_count_dict[im_label] = temp_class_count
+            if temp_class_count == 0:
+                tf.logging.error('No valid collections of images found at ' + master_file_name)
+                return -1
+            if temp_class_count == 1:
+                tf.logging.error('Only one class was provided via ' +
+                                 master_file_name +
+                                 ' - multiple classes are needed for classification.')
+                return -1
+            
+        
+    
+    if evaluate_model:
+        (collections_dict_MTL_test,
+         image_2_label_dict_test) = wp4lib.collections_list_MTL_to_image_lists(
+                                             cur_collections_list_test,
+                                             labels_2_learn,
+                                             -1,
+                                             master_dir,
+                                             bool_CrossVal)
+        
+        (collections_dict_MTL_test,
+         image_2_label_dict_test) = sort_out_incomplete_samples(collections_dict_MTL_test, image_2_label_dict_test, min_num_labels)
+    
+    if len(collections_list_cv) == 0:
+        class_count_dict = {}
+        for im_label in collections_dict_MTL_test.keys():
+            temp_class_count = len(collections_dict_MTL_test[im_label].keys())
+            class_count_dict[im_label] = temp_class_count
+        samplehandler = SampleHandler(len(image_2_label_dict_test.keys()), 0)
+    #collections_dict_MTL[task][class label][images]
+    #image_2_label_dict[full_image_name][#label_1, ..., #label_N]
+
+    
+    
+        
+        # TO DO: Intersection of image_2_label_dict.keys()
+        # -> train, val, test
+    
+    
+    
+    # Set up the pre-trained graph.
+    # Sometimes in the following line a problem occurs. If so, please check,
+    # wehre the tfhub_module has been saved and delete it. un the code
+    # afterwards again.
+    module_spec = hub.load_module_spec(str(tfhub_module)) 
+    
+    (train_step, 
+     cross_entropy,
+     ground_truth_input,
+     final_tensor, 
+     filename_input,
+     graph,
+     input_image_tensor,
+     trainable_variables) = create_computation_graph(module_spec            = module_spec, 
+                                                 num_finetune_layers    = num_finetune_layers, 
+                                                 class_count_dict       = class_count_dict, 
+                                                 final_tensor_name      = final_tensor_name,
+                                                 is_training            = True, 
+                                                 learning_rate          = learning_rate,
+                                                 num_joint_fc_layer     = num_joint_fc_layer, 
+                                                 num_nodes_joint_fc     = num_nodes_joint_fc, 
+                                                 nodes_prop_2_num_tasks = nodes_prop_2_num_tasks, 
+                                                 num_task_stop_gradient = num_task_stop_gradient,
+                                                 aug_set_dict           = aug_set_dict,
+                                                 weight_decay           = weight_decay
+                             )
+    
+    with tf.Session(graph=graph) as sess:                                    # initialize the weights (pretrained/random) ---> graph contains loaded module
+        # Initialize all weights: for the module to their pretrained values,
+        # and for the newly added retraining layer to random initial values.
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        if how_many_training_steps > 0:
+            print("The following variables will be optimized during training:")
+            for var in trainable_variables:
+                print("\t",var.name)
+
+        
+        jpeg_data_tensor, decoded_image_tensor = wp4lib.add_jpeg_decoding(module_spec=module_spec,
+                                                          bool_hub_module=True,
+                                                          input_height=0,
+                                                          input_width=0,
+                                                          input_depth=0,
+                                                          bool_data_aug=True,
+                                                          aug_set_dict=aug_set_dict,
+                                                          crop_aspect_ratio=crop_aspect_ratio)
+
+        
+        # Create the operations we need to evaluate the accuracy of our new layer.
+        with tf.variable_scope("evaluationLayers") as scope:
+            (prediction_perMTL, overall_acc_perMTL,
+            prediction_all, overall_acc_all,
+            ground_truth_all,
+            ground_truth_perMTL,
+            prediction_perMTL_inc, 
+            ground_truth_perMTL_inc, 
+            correct_prediction_complete) = add_evaluation_step_MTL(
+                                                         final_tensor,
+                                                         ground_truth_input,
+                                                         class_count_dict)
+        
+        
+        if bool_CrossVal:
+            logpath_ = logpath+'cv_'+str(cur_cv_iter)
+            result_folder_name_ = result_folder_name+'cv_'+str(cur_cv_iter)
+        else:
+            logpath_ = logpath
+            result_folder_name_ = result_folder_name
+        
+        # Merge all the summaries and write them out to the logpath
+        merged = tf.summary.merge_all()
+        train_writer = tf.summary.FileWriter(logpath_ + '/train', sess.graph)
+        
+        # Create a train saver that is used to restore values into an eval graph
+        # when exporting models.
+        train_saver = tf.train.Saver()
+        
+        # after all bottlenecks are cached, the collections_dict_train will
+        # be renamed to collections_dict, if a validation is desired
+        if bool_split_train_val:
+            collections_dict_MTL = collections_dict_MTL_train
+            val_writer = tf.summary.FileWriter(logpath_+ '/val', sess.graph)
+            
+        best_validation = 0
+        for i in range(how_many_training_steps):
+            print('\ncurrent training Iteration:', i)
+
+            (image_data, 
+             train_ground_truth, 
+             train_filenames) = get_random_samples(collections_dict_MTL = collections_dict_MTL, 
+                                                 how_many             = train_batch_size,
+                                                 module_name          = tfhub_module,
+                                                 master_dir           = master_dir, 
+                                                 image_2_label_dict   = image_2_label_dict_train,
+                                                 class_count_dict     = class_count_dict, 
+                                                 samplehandler        = samplehandler, 
+                                                 usage                = 'train',
+                                                 session              = sess,
+                                                 jpeg_data_tensor     = jpeg_data_tensor,
+                                                 decoded_image_tensor = decoded_image_tensor)
+            feed_dictionary = {}
+            feed_dictionary[input_image_tensor] = image_data
+            feed_dictionary[filename_input] = train_filenames
+            for ind in range(np.shape(train_ground_truth)[0]):
+                feed_dictionary[ground_truth_input[ind]] = train_ground_truth[ind]                    
+            (train_summary,
+             cross_entropy_value, _) = sess.run(
+                                [merged, cross_entropy, train_step],
+                                feed_dict=feed_dictionary)
+            train_writer.add_summary(train_summary, i)
+            train_writer.flush()
+            
+            # If a validation is desired
+            if bool_split_train_val and (i%how_often_validation==0):
+                
+                # Validate on whole validation set
+                (val_image_data, 
+                 val_ground_truth, 
+                 val_filenames,_) = get_random_samples(collections_dict_MTL = collections_dict_MTL_val, 
+                                                     how_many             = -1, 
+                                                     module_name          = tfhub_module,
+                                                     master_dir           = master_dir, 
+                                                     image_2_label_dict   = image_2_label_dict_val,
+                                                     class_count_dict     = class_count_dict, 
+                                                     samplehandler        = samplehandler, 
+                                                     usage                ='valid',
+                                                     session              = sess,
+                                                     jpeg_data_tensor     = jpeg_data_tensor,
+                                                     decoded_image_tensor = decoded_image_tensor)
+                
+                OA_all = 0
+                OA_perMTL = {}
+                var_samples_total = {}
+                for val_iter in range(len(val_image_data)):
+            
+                    feed_dictionary = {}
+                    feed_dictionary[input_image_tensor] = val_image_data[train_batch_size*val_iter:train_batch_size*val_iter+train_batch_size]
+                    feed_dictionary[filename_input]   = val_filenames[train_batch_size*val_iter:train_batch_size*val_iter+train_batch_size]
+                    val_ground_truth_ = np.asarray(val_ground_truth)[:,train_batch_size*val_iter:train_batch_size*val_iter+train_batch_size]
+                    if(len(feed_dictionary[input_image_tensor])) == 0: break
+                    for ind in range(np.shape(val_ground_truth_)[0]):
+                        feed_dictionary[ground_truth_input[ind]] = val_ground_truth_[ind]
+                        
+                    pred_perMTL, OA_perMTL_, _, OA_all_ = sess.run(
+                                    [prediction_perMTL,
+                                     overall_acc_perMTL,
+                                     prediction_all, overall_acc_all],
+                                    feed_dict=feed_dictionary)
+                    
+                    # kompliziertes Aufsummieren der OA, jeweils gesamt und per Task
+                    var_dict_OA = {}
+                    var_samples = {}
+                    for MTL_iter, MTL_ele in enumerate(OA_perMTL_):
+                        var_samples[MTL_iter] = len(pred_perMTL[MTL_iter])
+                        
+                        if val_iter == 0:
+                            var_samples_total[MTL_iter] = var_samples[MTL_iter]
+                            OA_perMTL[MTL_iter] = OA_perMTL_[MTL_iter]*var_samples[MTL_iter]
+                        else:
+                            var_samples_total[MTL_iter] += var_samples[MTL_iter]
+                            OA_current_MTL         = OA_perMTL_[MTL_iter]
+                            samples_current_MTL    = var_samples[MTL_iter]
+                            OA_overall_current_MTL = OA_perMTL[MTL_iter]
+                            OA_perMTL[MTL_iter] = OA_current_MTL*samples_current_MTL + OA_overall_current_MTL
+#                                OA_perMTL = tuple(var_dict_OA.values())
+                    OA_all += OA_all_*sum(var_samples.values())
+                    
+                OA_all /= sum(var_samples_total.values())
+                var_dict_OA = {}
+                for MTL_iter, MTL_ele in enumerate(OA_perMTL.keys()):
+                    var_dict_OA[MTL_iter] = OA_perMTL[MTL_iter]/var_samples_total[MTL_iter]
+                OA_perMTL = tuple(var_dict_OA.values())
+
+                summary_val_OA = [tf.Summary.Value(tag='evaluationLayers/OA_all',
+                                                   simple_value=OA_all)]
+                val_writer.add_summary(tf.Summary(value=summary_val_OA), i)
+                val_writer.flush()
+                for MTL_index, MTL_task in enumerate(class_count_dict):
+                    summary_MTL = [tf.Summary.Value(tag='OA_'+MTL_task,
+                                                   simple_value=OA_perMTL[MTL_index])]
+                    val_writer.add_summary(tf.Summary(value=summary_MTL), i)
+                    val_writer.flush()
+   
+            if bool_split_train_val:
+                if best_validation < OA_all:
+                    print("New best overall accuracy: %2.2f %%" % (OA_all*100))
+                    train_saver.save(sess, logpath_+'/'+CHECKPOINT_NAME)
+                    best_validation = OA_all
+            else:
+                train_saver.save(sess, logpath_+'/'+CHECKPOINT_NAME)
+#                    
+        # Load latest checkpoint, i.e. the model that performed best
+        # on the validation set
+#                    if how_many_training_steps == 0:
+#                        test_saver = tf.train.import_meta_graph(logpath + CHECKPOINT_NAME + '.meta',
+#                                               clear_devices=True)
+#                        test_saver.restore(sess, logpath + CHECKPOINT_NAME)
+#                        
+#                    else:
+#                        latest_checkpoint = tf.train.latest_checkpoint(logpath)
+#                        train_saver.restore(sess, latest_checkpoint)
+        
+        
+        # Perform "empty" training step for variable initialization?!
+        if evaluate_model:
+            
+            if how_many_training_steps == 0:
+                print("No training will be carried out! Proceeding with Evaluation")
+                (image_data, 
+                 train_ground_truth, 
+                 train_filenames) = get_random_samples(collections_dict_MTL = collections_dict_MTL_test, 
+                                                     how_many             = 1,
+                                                     module_name          = tfhub_module,
+                                                     master_dir           = master_dir, 
+                                                     image_2_label_dict   = image_2_label_dict_test,
+                                                     class_count_dict     = class_count_dict, 
+                                                     samplehandler        = samplehandler, 
+                                                     usage                = 'train',
+                                                     session              = sess,
+                                                     jpeg_data_tensor     = jpeg_data_tensor,
+                                                     decoded_image_tensor = decoded_image_tensor)
+                feed_dictionary = {}
+                feed_dictionary[input_image_tensor] = image_data
+                feed_dictionary[filename_input] = train_filenames
+                for ind in range(np.shape(train_ground_truth)[0]):
+                    feed_dictionary[ground_truth_input[ind]] = train_ground_truth[ind]                    
+                (train_summary,
+                 cross_entropy_value) = sess.run(
+                                    [merged, cross_entropy],
+                                    feed_dict=feed_dictionary)
+            
+            latest_checkpoint = tf.train.latest_checkpoint(logpath)
+            train_saver.restore(sess, latest_checkpoint)
+            
+            # Get test samples
+            (test_image_data, 
+             test_ground_truth, 
+             test_filenames,
+             test_scale_factors) = get_random_samples(collections_dict_MTL = collections_dict_MTL_test, 
+                                                 how_many             = -1, 
+                                                 module_name          = tfhub_module,
+                                                 master_dir           = master_dir, 
+                                                 image_2_label_dict   = image_2_label_dict_test,
+                                                 class_count_dict     = class_count_dict, 
+                                                 samplehandler        = None, 
+                                                 usage                = None,
+                                                 session              = sess,
+                                                 jpeg_data_tensor     = jpeg_data_tensor,
+                                                 decoded_image_tensor = decoded_image_tensor)
+            
+            # open files to write classification results to
+            
+            if not os.path.exists(result_folder_name_):
+                os.makedirs(result_folder_name_)
+            class_res_id = open(os.path.abspath(result_folder_name_+'classification_results.txt'), 'w')
+            class_score_file = open(os.path.abspath(result_folder_name_+'classification_scores.txt'), 'w')
+            class_res_id.write('#image_file')
+            for task in task_dict.keys():
+                class_res_id.write('\t#'+task)
+            class_res_id.write('\n')                      
+            
+            # Test all data with batchsize
+            test_pred_perMTL, test_pred_all, test_gt_perMTL, test_gt_all = [], [], [], []
+            test_correct_pred_comp = []
+            for test_iter in range(len(test_image_data)):
+                
+                feed_dictionary = {}
+                feed_dictionary[input_image_tensor] = test_image_data[train_batch_size*test_iter:train_batch_size*test_iter+train_batch_size]
+                feed_dictionary[filename_input]   = test_filenames[train_batch_size*test_iter:train_batch_size*test_iter+train_batch_size]
+                test_ground_truth_ = np.asarray(test_ground_truth)[:,train_batch_size*test_iter:train_batch_size*test_iter+train_batch_size]
+                if(len(feed_dictionary[input_image_tensor])) == 0: break
+                for ind in range(np.shape(test_ground_truth_)[0]):
+                    feed_dictionary[ground_truth_input[ind]] = test_ground_truth_[ind]
+                    
+                (test_pred_perMTL_, test_pred_all_,
+                 test_gt_perMTL_, test_gt_all_,
+                 test_pred_perMTL_inc_, 
+                 test_gt_perMTL_inc_,
+                 test_correct_pred_comp_,
+                 classifictation) = sess.run([prediction_perMTL,
+                                                 prediction_all,
+                                                 ground_truth_perMTL,
+                                                 ground_truth_all,
+                                                 prediction_perMTL_inc, 
+                                                 ground_truth_perMTL_inc,
+                                                 correct_prediction_complete,
+                                                 final_tensor],
+                                                 feed_dict=feed_dictionary)
+                
+                # Assuming that final_tensor is of shape [?, nVariables, nTasks]
+                for sampleID, sample in enumerate(classifictation):
+                    
+                    resultTasks = {}
+                    for i, task in enumerate(task_dict.keys()):
+                        resultTasks[task] = np.argmax(sample[i])
+                    resultClasses = {}
+                    for task in task_dict:
+                        class_list = task_dict[task]
+                        resultClasses[task] = class_list[resultTasks[task]]
+                    class_res_id.write("%s" % (test_filenames[sampleID]))
+                    for task in task_dict:
+                        class_res_id.write("\t%s" % (resultClasses[task]))
+                    class_res_id.write("\n")
+                    
+                    class_score_file.write("****"+test_filenames[sampleID] +"****"+ "\n")
+                    for ti, task in enumerate(task_dict):
+                        class_score_file.write(task+": \t \t")
+                        for ci, c in enumerate(task_dict[task]):
+                            class_score_file.write(c + ": "+ str(np.around(sample[ti][0][ci]*100,2))+"% \t \t")
+                            
+                        class_score_file.write("\n")
+                    class_score_file.write("\n")
+                    class_score_file.write("\n")
+                
+                if test_iter == 0:
+                    test_pred_perMTL = test_pred_perMTL_
+                    test_gt_perMTL   = test_gt_perMTL_
+                    test_pred_perMTL_inc = test_pred_perMTL_inc_
+                    test_gt_perMTL_inc   = test_gt_perMTL_inc_
+                else:
+                    var_dict_pred = {}
+                    for MTL_iter, MTL_ele in enumerate(test_pred_perMTL):
+                        var_dict_pred[MTL_iter] = np.concatenate((MTL_ele,test_pred_perMTL_[MTL_iter]), axis=-1)
+                    test_pred_perMTL = tuple(var_dict_pred.values())
+                    
+                    var_dict_gt = {}
+                    for MTL_iter, MTL_ele in enumerate(test_gt_perMTL):
+                        var_dict_gt[MTL_iter] = np.concatenate((MTL_ele,test_gt_perMTL_[MTL_iter]), axis=-1)
+                    test_gt_perMTL = tuple(var_dict_gt.values())
+                    
+                    var_dict_pred = {}
+                    for MTL_iter, MTL_ele in enumerate(test_pred_perMTL_inc):
+                        var_dict_pred[MTL_iter] = np.concatenate((MTL_ele,test_pred_perMTL_inc_[MTL_iter]), axis=-1)
+                    test_pred_perMTL_inc = tuple(var_dict_pred.values())
+                    
+                    var_dict_gt = {}
+                    for MTL_iter, MTL_ele in enumerate(test_gt_perMTL_inc):
+                        var_dict_gt[MTL_iter] = np.concatenate((MTL_ele,test_gt_perMTL_inc_[MTL_iter]), axis=-1)
+                    test_gt_perMTL_inc = tuple(var_dict_gt.values())
+                test_correct_pred_comp = np.concatenate((test_correct_pred_comp, test_correct_pred_comp_), axis=0)
+                
+                test_pred_all = np.concatenate((test_pred_all,
+                                                   test_pred_all_), axis=0)
+                test_gt_all = np.concatenate((test_gt_all,
+                                                 test_gt_all_), axis=0)
+            
+#            # Save all predictions for all samples as well as the (possibly unkown) labels
+#            test_pred_perMTL_inc_asarray = []
+#            test_gt_perMTL_inc_asarray   = []
+#            for e1, e2 in zip(test_pred_perMTL_inc, test_gt_perMTL_inc):
+#                test_pred_perMTL_inc_asarray.append(e1)
+#                test_gt_perMTL_inc_asarray.append(e2)
+#            np.save(result_folder_name_+'prediction.npy', test_pred_perMTL_inc_asarray)
+#            np.save(result_folder_name_+'groundtruth.npy', test_gt_perMTL_inc_asarray)
+            
+#            # Save plot for correlation between scale factor and prediction accuracy for complete samples
+#            plt.figure(num=None, figsize=(13, 6), dpi=140, facecolor='w', edgecolor='k')
+#            plt.plot(test_scale_factors, test_correct_pred_comp, 'r.')
+#            plt.rcParams.update({'font.size': 20})
+#            plt.xlabel('Side Ratio of original image')
+#            plt.ylabel('Correctly predicted labels[%]')
+#            plt.grid(axis='y', linewidth=2)
+#            plt.savefig(logpath+'cv_'+str(cur_cv_iter)+'/test/sideratio2accuracy.png')
+            
+            
+            class_res_id.close()
+            class_score_file.close()
+    
+    
+            # Save quality measure (per task) to disk
+            if bool_CrossVal:
+                logstring = 'Testing_cv_'+str(cur_cv_iter)+"_"
+            else: 
+                logstring = 'Testing_'
+            for task_index in range(np.shape(test_pred_perMTL)[0]):
+                wp4lib.estimate_quality_measures(test_gt_perMTL[task_index],
+                                        test_pred_perMTL[task_index],
+                                        list(collections_dict_MTL_test[
+                                                list(class_count_dict)[task_index]].keys()),
+                                        logstring + list(class_count_dict)[task_index],
+                                        result_folder_name_,
+                                        how_many_training_steps, bool_MTL)
+            
+    
+    if bool_CrossVal:
+        return test_pred_perMTL, test_gt_perMTL, \
+                class_count_dict, collections_dict_MTL_test
+                
+         
     

@@ -18,12 +18,12 @@ install_requires = [x.strip() for x in all_reqs if 'git+' not in x]
 dependency_links = [x.strip().replace('git+', '') for x in all_reqs if x.startswith('git+')]
 
 setup(
-    name='SilknowClassification',
+    name='silknow_image_classification',
     version=__version__,
-    description='Classifier for images of silk fabrics',
+    description='""',
     long_description=long_description,
-    url='https://github.com/silknow/SilknowClassification',
-    download_url='https://github.com/silknow/SilknowClassification/tarball/' + __version__,
+    url='https://github.com/SILKNOW/silknow_image_classification',
+    download_url='https://github.com/SILKNOW/silknow_image_classification/tarball/' + __version__,
     license='BSD',
     classifiers=[
       'Development Status :: 3 - Alpha',
@@ -31,9 +31,9 @@ setup(
       'Programming Language :: Python :: 3',
     ],
     keywords='',
-    packages=find_packages(exclude=['docs', 'tests*']),
-    include_package_data=True,
-    author='Dominic Clermont',
+    packages=find_packages(where='.', exclude=['docs', 'tests*']),
+	include_package_data=True,
+    author='LUH',
     install_requires=install_requires,
     dependency_links=dependency_links,
     author_email='clermont@ipi.uni-hannover.de'

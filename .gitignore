@@ -39,11 +39,8 @@ docs/_build
 # Cookiecutter
 output/
 
-dataexamples/dataset_creation/
-dataexamples/dummy_results/
-dataexamples/modelfile/
-build/
-dist/
-docs/
-SilknowClassification.egg-info/
-tests/
+silknow_image_classification/samples/img/
+silknow_image_classification/samples/img_classification/
+silknow_image_classification/output_files/
+silknow_image_classification/logfiles/
+*.ipynb

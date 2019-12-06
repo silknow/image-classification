@@ -312,7 +312,7 @@ def plot_confusion_matrix(cm, classes,
     plt.title(title)
     plt.colorbar()
     tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=0)
+    plt.xticks(tick_marks, classes, rotation=-90)
     plt.yticks(tick_marks, classes)
 
     fmt = '.2f' if normalize else 'd'
@@ -347,7 +347,7 @@ def estimate_quality_measures(ground_truth, prediction, list_class_names,
                           title='Confusion matrix')
 #    plt.show()
     fig_conf_mat.savefig(res_folder_name + '/' + prefix_plot +
-                         'Confusion_Matrix.jpg')
+                         '_Confusion_Matrix.jpg')
   
     # Confusin Matrix (normalized)
     conf_mat = confusion_matrix(np.asarray(ground_truth), 
@@ -359,7 +359,7 @@ def estimate_quality_measures(ground_truth, prediction, list_class_names,
                           title='Normalized confusion matrix')
 #    plt.show()
     fig_conf_mat_norm.savefig(res_folder_name + '/' + prefix_plot +
-                              'Confusion_Matrix_normalized.jpg')
+                              '_Confusion_Matrix_normalized.jpg')
     
     # f1-scores
     f1_None     = f1_score(np.asarray(ground_truth), 
@@ -381,9 +381,7 @@ def estimate_quality_measures(ground_truth, prediction, list_class_names,
     overall_accuracy = accuracy_score(np.asarray(ground_truth), 
                                        np.asarray(prediction))
     text_file_result = open(res_folder_name + '/' + prefix_plot +
-                            "Classification_results.txt", "w")  
-    text_file_result.write("Number of Iterations: " + 
-                           str(how_many_training_steps) + "\n")
+                            "_evaluation_results.txt", "w")  
     text_file_result.write("Total amount of data (" + prefix_plot + "): " + 
                            str(data_amount) + " images \n \n")  
     text_file_result.write("Overall Accuracy: %.2f %% \n \n" % 
@@ -573,7 +571,7 @@ def get_cooccurence_statistic(statistic_dict, coll_dict, result_folder=None):
 def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_shear = None,
                           random_brightness = None, random_crop = None, random_rotation = None,
                           random_contrast = None, random_hue = None, random_saturation = None,
-                          random_rotation90 = None, input_im_tensor = None):
+                          random_rotation90 = None, gaussian_noise = None, input_im_tensor = None):
     r"""Realizes data augmentation.
     
     :Arguments\::
@@ -617,6 +615,10 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
         :random_rotation90 (*bool*)\::
             If True, the image will be rotated counter-clockwise by 90 degrees
             (with a chance of 50%).
+        :gaussian_noise (*float*)\::
+            Adds gaussian noise to the image. The noise will be samples from a
+            gaussian distribution with zero mean and a standard deviation of 
+            gaussian_noise. 
         :input_im_tensor (*tensor*)\::
             The input image that will be transformed. Must be a tensor of rank 3,
             with sizes [image_height, image_width, image_channels]
@@ -672,7 +674,7 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
         # added: random_contrast
         # contrast_min >= 0, contrast_min < contrast_max!
         assert random_contrast[0] >= 0, "Minimum Contrast has to be larger than 0!"
-        assert random_contrast[1] > random_contrast[0], "Maximum Contrast has to be smaller than Minimum Contrast!"
+        assert random_contrast[1] > random_contrast[0], "Minimum Contrast has to be smaller than Maximum Contrast!"
         contrast_min      = random_contrast[0]
         contrast_max      = random_contrast[1]
         tranformed_image  = tf.image.random_contrast(tranformed_image,
@@ -712,7 +714,11 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
         # added: random_crop
         crop_fraction = random.uniform(random_crop[0], random_crop[1])
         tranformed_image = tf.image.central_crop(tranformed_image, crop_fraction)
-
+        
+    if gaussian_noise is not None:
+        noise = tf.random_normal(shape=tf.shape(tranformed_image), mean=0.0, stddev=gaussian_noise, dtype=tf.float32)
+        tranformed_image = tf.clip_by_value(tranformed_image + noise, 0.0, 1.0)
+        
     return tranformed_image
 
 
@@ -784,6 +790,7 @@ def add_jpeg_decoding(input_height, input_width, input_depth, module_spec,
         if "random_hue" not in aug_set_dict.keys(): aug_set_dict["random_hue"] = None
         if "random_saturation" not in aug_set_dict.keys(): aug_set_dict["random_saturation"] = None
         if "random_rotation90" not in aug_set_dict.keys(): aug_set_dict["random_rotation90"] = None
+        if "gaussian_noise" not in aug_set_dict.keys(): aug_set_dict["gaussian_noise"] = None
         decoded_image_as_float = add_data_augmentation(
                         flip_left_right=aug_set_dict["flip_left_right"],
                         flip_up_down=aug_set_dict["flip_up_down"],
@@ -795,6 +802,7 @@ def add_jpeg_decoding(input_height, input_width, input_depth, module_spec,
                         random_hue=aug_set_dict["random_hue"],
                         random_saturation=aug_set_dict["random_saturation"],
                         random_rotation90=aug_set_dict["random_rotation90"],
+                        gaussian_noise=aug_set_dict["gaussian_noise"],
                         input_im_tensor=decoded_image_as_float)
         
     # Gaussian filtering before downsizing, we assume that the target image size is square

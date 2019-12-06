@@ -131,10 +131,10 @@ def checkNumSamples(data, fieldname, minNumSamples):
             if count <= minNumSamples and not value=="NaN":
                 data[fieldname] = data[fieldname].replace(value, "NaN")
                 
-    else:
-        for value, count in data[fieldname].value_counts().iteritems():
-            if count <= minNumSamples and not value=="NaN":
-                data[fieldname] = data[fieldname].replace(value, "Other_"+fieldname.capitalize())
+#    else:
+#        for value, count in data[fieldname].value_counts().iteritems():
+#            if count <= minNumSamples and not value=="NaN":
+#                data[fieldname] = data[fieldname].replace(value, "Other_"+fieldname.capitalize())
             
     return data
 
@@ -222,12 +222,13 @@ def importDatasetConfiguration(configfile):
                      (r"technique.csv","technique"),
                      (r"timespan.csv","timespan")]
     FieldCSV_list_default = True
-    OutputDataPath = r"./master_collection_images_csv/"
+    OutputDataPath = r"./samples/dataset/"
     onlyFromCollection = "imatex"
-    InputDataPath = r"./master_collection_images_csv/"
+    InputDataPath = r"./samples/dataset/"
     MappingTable = r"ClassMapping.xlsx"
     ImageCSV = r"imagelinks.csv"
     minNumSamples = 150
+    skipDownload = False
     
     control_id = open(configfile, 'r',encoding='utf-8')
     for variable in control_id:
@@ -248,20 +249,18 @@ def importDatasetConfiguration(configfile):
             InputDataPath = variable.split(';')[1].strip()
         if variable.split(';')[0] == 'minNumSamples':
             minNumSamples = int(variable.split(';')[1].strip())
-        if variable.split(';')[0] == 'skipDownload':
-            skipDownload = variable.split(';')[1].strip()
-            if skipDownload == 'True':
-                skipDownload = True
-            else:
-                skipDownload = False
-        if variable.split(';')[0] == 'onlyFromCollection':
-            onlyFromCollection = variable.split(';')[1].strip()
+        if variable.split(';')[0] == 'num_joint_fc_layer':
+            numFC = int(variable.split(';')[1].strip())
+        if variable.split(';')[0] == 'num_nodes_joint_fc':
+            numNodes = int(variable.split(';')[1].strip())
             
             
     return ImageCSV, FieldCSV_list, MappingTable, OutputDataPath, \
-            InputDataPath, minNumSamples, skipDownload, onlyFromCollection
-    
-def createCNNConfigFile(data, MasterfilePath):
+            InputDataPath, minNumSamples, skipDownload, onlyFromCollection, \
+            numFC, numNodes
+   
+
+def createCNNConfigFile(data, MasterfilePath, numFC, numNodes):
     """ Creates a default CNN Configuration File.
         :Arguments:
             :data:
@@ -269,13 +268,135 @@ def createCNNConfigFile(data, MasterfilePath):
             :ConfigPath:
                 Path to the master file.
     """
-    config = open("CNNConfigurationFile.txt","w+")
+    config = open("CNNConfiguration.txt","w+")
+    
+    
+    # Write Default Architecture Configuration
+    config.writelines(["\n****************SPECIFICATIONS FOR SHARED LAYERS**************** \n"])
+    config.writelines(["num_joint_fc_layer; "+str(numFC)+"\n"])
+    config.writelines(["num_nodes_joint_fc; "+str(numNodes)+"\n"])
+    
+    # Write variables and their classes
+    config.writelines(["\n****************CLASSIFICATION BRANCHES**************** \n"])
+    variables = np.asarray(data.columns)
+    variables.sort()
+    for var in variables:
+        classes = np.asarray(list(filter(lambda v: v==v, np.asarray(data[var].unique()))))
+        classes = classes[classes != 'NaN']
+        classes.sort()
+        string = [" #"+name for name in classes]
+        config.writelines(["variable_and_class; #"+var]+string+["\n"])
+    config.close()
+    
+def createTrainingConfigFile(MasterfilePath):
+    """ Creates a default Training Configuration File.
+        :Arguments:
+            :data:
+                Pandas Dataframe which lists all samples.
+            :ConfigPath:
+                Path to the master file.
+    """
+    config = open("TrainingConfiguration.txt","w+")
+    
+    # Path and name of CNN configuration file
+    config.writelines(["\n****************CNN CONFIGURATION FILE**************** \n"])
+    config.writelines(["cnn_config_file_name; "+  "CNNConfiguration.txt\n"])
+    config.writelines(["cnn_config_file_path; "+  "./" +"\n"])
     
     # Write Default Paths
     config.writelines(["****************FILES AND DIRECTORIES**************** \n"])
     config.writelines(["master_file_name; Masterfile.txt\n"])
     config.writelines(["master_dir; " +  MasterfilePath +"\n"])
-    config.writelines(["logpath; "+  r"./logfiles/CNN_Default/"+"\n"])
+    config.writelines(["logpath; "+  r"./output_files/logfiles/CNN_Default/"+"\n"])
+    
+    # Write Default Training Configuration
+    config.writelines(["\n****************TRAINING SPECIFICATIONS**************** \n"])
+    config.writelines(["train_batch_size; 300\n"])
+    config.writelines(["how_many_training_steps; 300\n"])
+    config.writelines(["learning_rate; 1e-4\n"])
+    config.writelines(["validation_percentage; 25\n"])
+    config.writelines(["how_often_validation; 10\n"])
+    config.writelines(["weight_decay; 1e-2\n"])
+    config.writelines(["num_finetune_layers; 2\n"])
+    config.writelines(["evaluation_index; 1\n"])
+    
+    # Write Default Data Augmentation Configuration
+    config.writelines(["\n****************DATA AUGMENTATION SPECIFICATIONS**************** \n"])
+    config.writelines(["flip_left_right; True\n"])
+    config.writelines(["flip_up_down; True\n"])
+    config.writelines(["random_rotation90; True\n"])
+    config.writelines(["gaussian_noise; 0.01\n"])
+
+    config.close()
+    
+def createEvaluationConfigFile(MasterfilePath):
+    """ Creates a default Evaluation Configuration File.
+        :Arguments:
+            :data:
+                Pandas Dataframe which lists all samples.
+            :ConfigPath:
+                Path to the master file.
+    """
+    config = open("EvaluationConfiguration.txt","w+")
+    
+    # Path and name of CNN configuration file
+    config.writelines(["\n****************CNN CONFIGURATION FILE**************** \n"])
+    config.writelines(["cnn_config_file_name; "+  "CNNConfiguration.txt\n"])
+    config.writelines(["cnn_config_file_path; "+  "./" +"\n"])
+    
+    # Write Default Paths for Evaluation
+    config.writelines(["\n****************EVALUATION SPECIFICATIONS**************** \n"])
+    config.writelines(["logpath; "+  r"./output_files/logfiles/CNN_Default/"+"\n"])
+    config.writelines(["evaluation_result_path; ./output_files/evaluation_result/CNN_Default/\n"])
+    config.writelines(["evaluation_master_file_name; Masterfile_Evaluation.txt\n"])
+    config.writelines(["evaluation_master_dir; " +  MasterfilePath +"\n"])
+
+    config.close()
+    
+def createClassificationConfigFile(MasterfilePath):
+    """ Creates a default Classification Configuration File.
+        :Arguments:
+            :data:
+                Pandas Dataframe which lists all samples.
+            :ConfigPath:
+                Path to the master file.
+    """
+    config = open("ClassificationConfiguration.txt","w+")
+
+    # Path and name of CNN configuration file
+    config.writelines(["\n****************CNN CONFIGURATION FILE**************** \n"])
+    config.writelines(["cnn_config_file_name; "+  "CNNConfiguration.txt\n"])
+    config.writelines(["cnn_config_file_path; "+  "./" +"\n"])
+    
+    # Write Default Paths for Classification
+    config.writelines(["\n****************CLASSIFICATION SPECIFICATIONS**************** \n"])
+    config.writelines(["logpath; "+  r"./output_files/logfiles/CNN_Default/"+"\n"])
+    config.writelines(["classification_result_path; ./output_files/classification_result/CNN_Default/\n"])
+    config.writelines(["classification_master_file_name; Masterfile_Classification.txt\n"])
+    config.writelines(["classification_master_dir; " +  MasterfilePath +"\n"])
+
+    config.close()    
+    
+def createCrossvalidationConfigFile(MasterfilePath):
+    """ Creates a default Crossvalidation Configuration File.
+        :Arguments:
+            :data:
+                Pandas Dataframe which lists all samples.
+            :ConfigPath:
+                Path to the master file.
+    """
+    config = open("CrossvalidationConfiguration.txt","w+")
+
+    config.writelines(["\n****************CNN CONFIGURATION FILE**************** \n"])
+    config.writelines(["cnn_config_file_name; "+  "CNNConfiguration.txt\n"])
+    config.writelines(["cnn_config_file_path; "+  "./" +"\n"])
+    
+    # Write Default Paths
+    config.writelines(["****************FILES AND DIRECTORIES**************** \n"])
+    config.writelines(["master_file_name; Masterfile.txt\n"])
+    config.writelines(["master_dir; " +  MasterfilePath +"\n"])
+    config.writelines(["logpath; "+  r"./output_files/logfiles/CNN_Default/"+"\n"])
+    config.writelines(["evaluation_result_path; "+  r"./output_files/evaluation_result/"+"\n"])
     
     # Write Default Training Configuration
     config.writelines(["\n****************TRAINING SPECIFICATIONS**************** \n"])
@@ -287,42 +408,10 @@ def createCNNConfigFile(data, MasterfilePath):
     config.writelines(["weight_decay; 1e-2\n"])
     config.writelines(["num_finetune_layers; 2\n"])
     
-    # Write Default Architecture Configuration
-    config.writelines(["\n****************ARCHITECTURE SPECIFICATIONS**************** \n"])
-    config.writelines(["tfhub_module; https://tfhub.dev/google/imagenet/resnet_v2_152/feature_vector/1\n"])
-    config.writelines(["num_joint_fc_layer; 1\n"])
-    config.writelines(["num_nodes_joint_fc; 1500\n"])
-    
     # Write Default Data Augmentation Configuration
     config.writelines(["\n****************DATA AUGMENTATION SPECIFICATIONS**************** \n"])
     config.writelines(["flip_left_right; True\n"])
     config.writelines(["flip_up_down; True\n"])
     config.writelines(["random_rotation90; True\n"])
-    
-    
-    # Write variables and their classes
-    config.writelines(["\n****************CLASS STRUCTURE**************** \n"])
-    variables = np.asarray(data.columns)
-    variables.sort()
-    for var in variables:
-        classes = np.asarray(list(filter(lambda v: v==v, np.asarray(data[var].unique()))))
-        classes = classes[classes != 'NaN']
-        classes.sort()
-        string = [" #"+name for name in classes]
-        config.writelines(["variable_and_class; #"+var]+string+["\n"])
-    
-    # Write Default Paths for Evaluation
-    config.writelines(["\n****************EVALUATION SPECIFICATIONS**************** \n"])
-    config.writelines(["evaluation_result_path; ./evaluation_result/\n"])
-    config.writelines(["evaluation_master_file_name; Masterfile_Evaluation.txt\n"])
-    config.writelines(["evaluation_master_dir; " +  MasterfilePath +"\n"])
-    config.writelines(["evaluation_index; 1\n"])
-    
-    # Write Default Paths for Classification
-    config.writelines(["\n****************CLASSIFICATION SPECIFICATIONS**************** \n"])
-    config.writelines(["classification_result_path; ./classification_result/\n"])
-    config.writelines(["classification_master_file_name; Masterfile_Classification.txt\n"])
-    config.writelines(["classification_master_dir; " +  MasterfilePath +"\n"])
-
-    
+    config.writelines(["gaussian_noise; 0.01\n"])
     config.close()

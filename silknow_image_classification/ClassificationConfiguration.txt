@@ -1,0 +1,9 @@
+****************CNN CONFIGURATION FILE**************** 
+cnn_config_file_name; CNNConfiguration.txt
+cnn_config_file_path; ./
+
+****************CLASSIFICATION SPECIFICATIONS**************** 
+logpath; ./output_files/logfiles/CNN_Default/
+classification_result_path; ./output_files/classification_result/CNN_Default/
+classification_master_file_name; Masterfile_Classification.txt
+classification_master_dir; ./samples/
