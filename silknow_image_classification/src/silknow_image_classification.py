@@ -170,6 +170,7 @@ def createDataset(configfile):
     image_data = image_data.replace("NaN", np.nan)
     image_data["nancount"] = image_data.isnull().sum(axis=1)
     image_data = image_data[image_data.nancount != numVars]
+    image_data = image_data[np.asarray(FieldCSV_list)[:,1]]
         
     
 #    # Save dataset as .csv

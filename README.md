@@ -14,20 +14,4 @@ Installation / Usage
 
 To install use pip:
 
-    $ pip install silknow_image_classification
-
-
-Or clone the repo:
-
-    $ git clone https://github.com/SILKNOW/silknow_image_classification.git
-    $ python setup.py install
-    
-Contributing
-------------
-
-TBD
-
-Example
--------
-
-TBD
+    $ pip install .

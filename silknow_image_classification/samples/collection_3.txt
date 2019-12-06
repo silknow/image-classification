@@ -1,7 +1,4 @@
 #image_file	#depiction	#material	#place	#technique	#timespan	
-./img/imatex__67842655-ebcf-3e22-b662-fe946480bbd4.jpg	Floral_Patterns	NaN	Asia	NaN	19th_c.	
-./img/imatex__6786ecde-b880-373d-be16-a992a610f3c8.jpg	Floral_Patterns	Silk	Asia	Patterned_Fabric	19th_c.	
-./img/imatex__67afb146-8ab2-3edb-98c9-28d7359bf19b.jpg	Birds	Metal_Thread	NaN	Patterned_Fabric	16th_c.	
 ./img/imatex__67b50704-89ab-330b-bbee-e47ac825f9c7.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__67cac84d-f06a-32ed-a93c-3cff9927314d.jpg	Floral_Patterns	Silk	ES	Patterned_Fabric	18th_c.	
 ./img/imatex__67dd87d8-1730-3213-93e9-cc415f68372c.jpg	NaN	Silk	NaN	Patterned_Fabric	16th_c.	
@@ -272,7 +269,6 @@
 ./img/imatex__729a6504-e22b-3177-950f-714a4899178d.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__72afcd6b-6136-3f17-917c-dbe13337ecdb.jpg	NaN	Silk	ES	Patterned_Fabric	16th_c.	
 ./img/imatex__72b85a8b-bffc-3f63-a0c0-c917f4d8530a.jpg	NaN	Silk	NaN	Patterned_Fabric	16th_c.	
-./img/imatex__72ba8d7e-ad96-3ec1-ab02-03cdd9efa917.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__72c452be-a7eb-3922-9339-ec5afcdc1640.jpg	NaN	Silk	ES	Brocatelle	17th_c.	
 ./img/imatex__72c7c593-481e-37aa-a918-e64f237dc7db.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__72d2ae52-3b61-372b-962d-77c0528a818a.jpg	NaN	Metal_Thread	NaN	Brocading	NaN	
@@ -431,7 +427,6 @@
 ./img/imatex__79028782-1d2e-3cc6-b6c7-e4a96a4e08ce.jpg	Plant_Motifs	Metal_Thread	ES	Brocading	18th_c.	
 ./img/imatex__7912ac83-d65b-3783-a098-42faceba12ee.jpg	Floral_Patterns	Metal_Thread	ES	Brocading	17th_c.	
 ./img/imatex__7919c449-4841-39b3-a184-ba5ec17827ea.jpg	Plant_Motifs	Metal_Thread	NaN	Brocading	18th_c.	
-./img/imatex__791c94d5-5176-3cc7-8e4c-296b6f9590b6.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__792cbca3-66ea-3654-8442-911930f8769e.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__7937a87f-fa46-3f09-8c7e-c7c8d86f8163.jpg	Floral_Patterns	Metal_Thread	ES	Brocading	18th_c.	
 ./img/imatex__794f0fa9-ad67-3c93-bf01-dee0625069c5.jpg	Floral_Patterns	Silk	ES	Damask	17th_c.	
@@ -446,7 +441,6 @@
 ./img/imatex__798999b4-e344-378b-b9ee-75a23f1065ee.jpg	Bands_Arrangement	Silk	Asia	Patterned_Fabric	19th_c.	
 ./img/imatex__798ce886-2ba6-351a-a3c8-6a7f291431bd.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__799fe0f6-c7d8-30e1-b01b-19e720cec9c5.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
-./img/imatex__79ac4031-efeb-394d-a2d2-d5f775acb43e.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__79b0992a-d960-3590-b185-9f84f496768c.jpg	Floral_Patterns	Silk	ES	Patterned_Fabric	16th_c.	
 ./img/imatex__79be4cd4-a3aa-3a09-8bb1-936ecdfa402d.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__79befcca-8520-3985-b5e9-d211ffc263cf.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
@@ -504,7 +498,6 @@
 ./img/imatex__7b864762-d0a1-3dd8-a25e-9e3226d263fb.jpg	Floral_Patterns	Metal_Thread	NaN	Brocading	18th_c.	
 ./img/imatex__7b88afac-a0d0-3f99-94b1-5ba6a92154a3.jpg	NaN	Silk	ES	Damask	16th_c.	
 ./img/imatex__7b8ae3b8-f71c-3c65-b041-e1373fb20705.jpg	Floral_Patterns	Silk	ES	Damask	18th_c.	
-./img/imatex__7ba1a986-c6fb-3e89-a4fd-02ad37cebc02.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__7bb68077-ecbc-3d2f-9558-04438d0baf13.jpg	NaN	Metal_Thread	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__7bc41195-90af-3125-96d1-2a5f3a27521c.jpg	NaN	Silk	IR	Embroidering	17th_c.	
 ./img/imatex__7be85990-b1eb-3e4c-9327-d43d8d30a754.jpg	Floral_Patterns	Silk	NaN	Brocading	18th_c.	
@@ -1166,7 +1159,6 @@
 ./img/imatex__986aa452-a6f4-30b5-94c0-756034fab98d.jpg	NaN	Metal_Thread	ES	Brocading	16th_c.	
 ./img/imatex__986bdb47-3113-39f1-8a97-438858f3dd6b.jpg	Birds	Silk	ES	Brocatelle	16th_c.	
 ./img/imatex__98703544-f8f3-3067-818f-5d19d600679e.jpg	NaN	Silk	IR	Patterned_Fabric	16th_c.	
-./img/imatex__987f458e-05ab-3911-be77-38cfccc56ca2.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__98800b18-2078-3676-8812-a18f34fe952c.jpg	Bands_Arrangement	Silk	NaN	NaN	16th_c.	
 ./img/imatex__988b05c4-6701-31db-bf05-a5065815a2c3.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__989f2eb4-6f8e-3f54-9014-8a33148fc2b2.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
@@ -1224,3 +1216,7 @@
 ./img/imatex__9af71608-f027-3dff-9926-ad1d7cd67641.jpg	Birds	Silk	ES	Brocatelle	16th_c.	
 ./img/imatex__9afd16dd-7bb6-3af2-862b-070e11d235c0.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__9b0cdb21-101b-3144-8709-4816d602f568.jpg	Bands_Arrangement	NaN	IT	Brocading	NaN	
+./img/imatex__9b0e734f-d4c5-3f02-af9f-f2775e57c4ce.jpg	NaN	Metal_Thread	NaN	Patterned_Fabric	18th_c.	
+./img/imatex__9b1501e1-4d30-379d-9c26-985c351126d8.jpg	NaN	Silk	NaN	Patterned_Fabric	16th_c.	
+./img/imatex__9b1d898a-d204-32bd-8c5f-f0d342708919.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
+./img/imatex__9b2da516-ff8b-3d5e-982c-399543bd1f30.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	16th_c.	

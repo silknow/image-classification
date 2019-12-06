@@ -1,7 +1,7 @@
+
 ****************CNN CONFIGURATION FILE**************** 
 cnn_config_file_name; CNNConfiguration.txt
 cnn_config_file_path; ./
-
 ****************FILES AND DIRECTORIES**************** 
 master_file_name; Masterfile.txt
 master_dir; ./samples/
@@ -16,7 +16,6 @@ how_often_validation; 10
 weight_decay; 1e-2
 num_finetune_layers; 2
 evaluation_index; 1
-
 
 ****************DATA AUGMENTATION SPECIFICATIONS**************** 
 flip_left_right; True

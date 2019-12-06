@@ -1,3 +1,4 @@
+
 ****************CNN CONFIGURATION FILE**************** 
 cnn_config_file_name; CNNConfiguration.txt
 cnn_config_file_path; ./

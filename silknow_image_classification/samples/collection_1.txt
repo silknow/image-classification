@@ -121,7 +121,6 @@
 ./img/imatex__055b1dd9-bb72-3277-9956-5285e437237c.jpg	NaN	Silk	NaN	Patterned_Fabric	19th_c.	
 ./img/imatex__0563d2cd-256e-3998-896a-b58ae83926ba.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__056b67e5-d3c3-3998-8d1b-9bed4e841d83.jpg	Birds	Silk	NaN	Damask	18th_c.	
-./img/imatex__0572743c-7977-3d36-af32-6c44ee009794.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__058b0dda-3194-33d0-9cb2-d311e1dddf3a.jpg	NaN	Silk	NaN	Embroidering	18th_c.	
 ./img/imatex__0590f79f-1d40-32be-a777-75c28895b9bd.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__05a4dbed-7e9e-3bd8-84e7-da4992477d34.jpg	NaN	Silk	ES	NaN	19th_c.	
@@ -157,7 +156,6 @@
 ./img/imatex__06d1857a-7d4c-3419-8afa-35149e15fe5c.jpg	NaN	Silk	ES	NaN	18th_c.	
 ./img/imatex__06d3d392-9c89-3977-8c66-51bb56198727.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__06db9533-ee58-324b-a751-c3e9737a5221.jpg	NaN	Silk	ES	Damask	16th_c.	
-./img/imatex__06dcc3c7-db39-3e84-8827-8daeac5fab17.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__06e27661-8b37-3a5f-a2c3-5274a1e70b1f.jpg	Floral_Patterns	Silk	NaN	Damask	18th_c.	
 ./img/imatex__06eb5ce8-ef16-3dd9-9134-98dec08fc3e7.jpg	NaN	Silk	NaN	Embroidering	18th_c.	
 ./img/imatex__0709b86a-5e68-3d3b-98e2-6c9881d962ce.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
@@ -412,7 +410,6 @@
 ./img/imatex__11e38eea-3948-3419-9626-3ee11f479590.jpg	Floral_Patterns	Silk	ES	Patterned_Fabric	18th_c.	
 ./img/imatex__11f03da2-692b-34e4-b7ba-0ca8dc3257ce.jpg	NaN	Silk	ES	Damask	16th_c.	
 ./img/imatex__11fdcf11-53a6-33e5-b888-d1bf6d5d90b5.jpg	NaN	Silk	NaN	Patterned_Fabric	17th_c.	
-./img/imatex__120aea3c-6ae8-3848-a863-d7b350f79620.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__121f0dee-2041-3dc1-a3e3-35a60edac4ce.jpg	NaN	Silk	ES	Patterned_Fabric	16th_c.	
 ./img/imatex__1228da14-5eeb-3162-8665-b06a3a7ae7d8.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__122eb31a-3878-3795-ac62-eddb34b64ab1.jpg	NaN	Silk	NaN	Patterned_Fabric	16th_c.	
@@ -485,7 +482,6 @@
 ./img/imatex__149746c8-4b5b-35fe-adb8-7711eadd5deb.jpg	NaN	Silk	ES	Embroidering	NaN	
 ./img/imatex__14ab3671-8ee1-3598-9604-6df4ba4a7cf0.jpg	NaN	Silk	NaN	Patterned_Fabric	19th_c.	
 ./img/imatex__14b14419-96dd-3422-9515-a18b07089c81.jpg	Floral_Patterns	Metal_Thread	NaN	Brocading	18th_c.	
-./img/imatex__14b5104e-493a-30fe-8c5b-296d7f8b71d2.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__14b6ab93-bc34-32ed-aac7-0461b9c18a6b.jpg	Floral_Patterns	Silk	ES	Brocading	18th_c.	
 ./img/imatex__14c87997-d100-30d2-acbc-9868af59f172.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__14d2945a-48eb-3e05-b843-07f645adf500.jpg	NaN	Silk	NaN	Brocading	NaN	
@@ -568,7 +564,6 @@
 ./img/imatex__1813f90c-ada3-3e81-98c7-df53528fd462.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__1815785b-e47b-34a6-8c7d-47724b55eea8.jpg	NaN	Silk	ES	Damask	16th_c.	
 ./img/imatex__181bcd1d-32c9-35c3-84aa-cf02870b6833.jpg	NaN	NaN	NaN	Embroidering	NaN	
-./img/imatex__1821367b-7ae1-3a4c-9a9d-d4f6f319d371.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__1821f23f-0159-36ae-bcd9-ed42f4060d39.jpg	Birds	Silk	IR	Patterned_Fabric	16th_c.	
 ./img/imatex__1825e95f-31ea-3076-817a-441aaad3803f.jpg	NaN	Silk	ES	Patterned_Fabric	20th_c.	
 ./img/imatex__182ec6e3-4fb7-3f31-980d-64afe9acab5c.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
@@ -1031,7 +1026,6 @@
 ./img/imatex__2bfe7c0b-5b41-3d08-8774-9916cdffab18.jpg	NaN	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__2c01c88e-0332-3543-a7ae-f1bdfab8ae7c.jpg	NaN	Silk	ES	Damask	16th_c.	
 ./img/imatex__2c1aee54-fb5d-30eb-80dc-49a9d69e4fc8.jpg	NaN	Silk	NaN	Patterned_Fabric	18th_c.	
-./img/imatex__2c1b07dc-1c59-3a9c-98b0-79dff7fab883.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__2c4579e9-befd-3af2-a491-34b8632e4450.jpg	NaN	Silk	NaN	NaN	18th_c.	
 ./img/imatex__2c4f6ac3-3476-3d3e-9545-d0a4a03b6a49.jpg	NaN	Silk	NaN	Patterned_Fabric	17th_c.	
 ./img/imatex__2c60096e-e8d2-3aec-a076-caa6dbe7aec0.jpg	NaN	Silk	ES	Damask	16th_c.	
@@ -1191,7 +1185,6 @@
 ./img/imatex__327d6106-6fd5-3e3d-a042-4ec060ac4c01.jpg	NaN	Silk	ES	Patterned_Fabric	16th_c.	
 ./img/imatex__3281859e-3ff6-3304-abc8-34524145d236.jpg	NaN	Silk	ES	Damask	16th_c.	
 ./img/imatex__3288ef2b-3f13-36e4-a73a-875cfbdf4b00.jpg	NaN	Silk	NaN	Patterned_Fabric	19th_c.	
-./img/imatex__328f913f-a16a-3862-85a4-267e4f93bbf5.jpg	NaN	NaN	NaN	NaN	NaN	
 ./img/imatex__32935983-4299-3765-a6a6-33a31063a82d.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__32a5f14a-a27a-3a41-992c-d45709c7dc9a.jpg	Plant_Motifs	Silk	NaN	NaN	19th_c.	
 ./img/imatex__32b0ea4a-8a59-3677-ad64-e04354de0718.jpg	NaN	Silk	NaN	Patterned_Fabric	17th_c.	
@@ -1224,3 +1217,7 @@
 ./img/imatex__33ba64fb-34c4-387b-bad9-cee68af6eca6.jpg	NaN	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__33c8f874-6000-3b96-a25a-c8cce5355225.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	NaN	
 ./img/imatex__33d3643d-5bf2-3c74-bef4-e87724518579.jpg	Floral_Patterns	Silk	NaN	Patterned_Fabric	18th_c.	
+./img/imatex__33d4ac07-5a1c-32d9-a14e-f1695eb917b7.jpg	NaN	Silk	NaN	Patterned_Fabric	NaN	
+./img/imatex__33da9c69-b9e9-3c75-b75d-71d5399a335a.jpg	NaN	Silk	NaN	Damask	18th_c.	
+./img/imatex__33dee0d1-10d8-391f-aa82-b84df6423e62.jpg	NaN	Metal_Thread	NaN	Brocading	17th_c.	
+./img/imatex__33e79c14-2fd1-3f8f-800f-797ab941fd25.jpg	Floral_Patterns	Silk	NaN	Brocading	18th_c.	

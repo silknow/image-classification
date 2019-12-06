@@ -1,7 +1,4 @@
 #image_file	#depiction	#material	#place	#technique	#timespan	
-./img/imatex__cd91472c-ceea-3fd4-9c1e-ad9458648aad.jpg	NaN	Silk	ES	NaN	16th_c.	
-./img/imatex__cd995c04-913f-323f-8b58-904d9b2600f8.jpg	Floral_Patterns	Silk	NaN	Embroidering	18th_c.	
-./img/imatex__cdb20abe-a0fc-34b9-8285-a092c4d6f0f5.jpg	NaN	Silk	NaN	Patterned_Fabric	18th_c.	
 ./img/imatex__cdb3c43b-39c2-3734-855b-dbab25494ff3.jpg	NaN	Silk	NaN	Patterned_Fabric	17th_c.	
 ./img/imatex__cdb6c921-930d-388e-90fa-6b47d9275340.jpg	Birds	Silk	NaN	Damask	16th_c.	
 ./img/imatex__cdb89611-2c7c-39cc-8844-bc3c5ebdf74c.jpg	Floral_Patterns	Silk	IT	Patterned_Fabric	17th_c.	
