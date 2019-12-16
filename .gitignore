@@ -41,6 +41,8 @@ output/
 
 silknow_image_classification/samples/img/
 silknow_image_classification/samples/img_classification/
-silknow_image_classification/output_files/
 silknow_image_classification/logfiles/
+silknow_image_classification/documentation/*
+silknow_image_classification/documentation/**/
+!silknow_image_classification/documentation/documentation.pdf
 *.ipynb

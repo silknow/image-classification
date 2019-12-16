@@ -22,8 +22,8 @@ setup(
     version=__version__,
     description='""',
     long_description=long_description,
-    url='https://github.com/SILKNOW/silknow_image_classification',
-    download_url='https://github.com/SILKNOW/silknow_image_classification/tarball/' + __version__,
+    url='https://github.com/silknow/image-classification',
+    download_url='',
     license='BSD',
     classifiers=[
       'Development Status :: 3 - Alpha',
