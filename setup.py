@@ -11,8 +11,23 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 # get the dependencies and installs
-with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
-    all_reqs = f.read().split('\n')
+#with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
+#    all_reqs = f.read().split('\n')
+all_reqs = ['#Dev/Deployment',
+			'sphinx',
+			'sphinx_rtd_theme',
+			'nose',
+			'coverage',
+			'pypi-publisher',
+			'urllib3',
+			'numpy',
+			'pandas',
+			'tqdm',
+			'tensorflow==1.13.1',
+			'tensorflow-hub==0.6.0',
+			'matplotlib',
+			'sklearn',
+			'xlrd']
 
 install_requires = [x.strip() for x in all_reqs if 'git+' not in x]
 dependency_links = [x.strip().replace('git+', '') for x in all_reqs if x.startswith('git+')]
