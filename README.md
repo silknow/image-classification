@@ -17,19 +17,19 @@ To install the package silknow-image-classification use pip:
     $ pip install .
 	
 The installation will make sure that the following required packages are installed:
-Markup : * Sphinx
-		 * sphinx_rtd_theme
-		 * nose
-		 * coverage
-		 * pypi-publisher
-		 * urllib3
-		 * numpy
-		 * pandas
-		 * tqdm
-		 * tensorflow (version 1.13.1)
-		 * tensorflow-hub (version 0.6.0)
-		 * matplotlib
-		 * sklearn
-		 * xlrd
+	- Sphinx
+	- sphinx_rtd_theme
+	- nose
+	- coverage
+	- pypi-publisher
+	- urllib3
+	- numpy
+	- pandas
+	- tqdm
+	- tensorflow (version 1.13.1)
+	- tensorflow-hub (version 0.6.0)
+	- matplotlib
+	- sklearn
+	- xlrd
 
 The pre-trained model that was created using this software can be download from http://doi.org/10.5281/zenodo.3577299.
