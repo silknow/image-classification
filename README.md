@@ -6,7 +6,7 @@ author: LUH
 
 Overview
 --------
-This software provides python functions for the classification of images and training and evaluation of classification models. It consists of five main parts: The creation of a dataset, the training of a new classifier, the evaluation of an existing classifier, the classification of images using an existing classifier and the combined training and evaluation in a five-fold cross validation. All functions take configuration files as an input and generally write their results in specified paths. The format required for the configuration files is described in Deliverable D4.4.  A description of the software's main functions can be found in the documentation at silknow_image_classification/documentation/documentation.pdf. 
+This software provides python functions for the classification of images and training and evaluation of classification models. It consists of five main parts: The creation of a dataset, the training of a new classifier, the evaluation of an existing classifier, the classification of images using an existing classifier and the combined training and evaluation in a five-fold cross validation. All functions take configuration files as an input and generally write their results in specified paths. The format required for the configuration files is described in Deliverable D4.4.  A description of the software's main functions can be found in the documentation at silknow_image_classification/documentation/. 
 
 
 Installation / Usage
