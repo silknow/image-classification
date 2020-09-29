@@ -14,5 +14,4 @@ tensorflow-hub==0.6.0
 matplotlib
 sklearn
 scipy
-collections
 xlsxwriter

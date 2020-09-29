@@ -14,18 +14,11 @@ Installation / Usage
 
 To install clone the repo:
 
-    $ git clone https://github.com/Dorozynski/silknow_image_classification.git
-    $ python setup.py install
-
-Or:
-
-    $ git clone https://github.com/Dorozynski/silknow_image_classification.git
-    
-    change the working directory to the folder of the setup.py
-    
+    $ git clone https://github.com/silknow/image-classification
+    $ cd ./image-classification
     $ pip install --upgrade .
 
 Example
 -------
 
-An example of all function calls described in the documentation (see Overview) is provided in silknow_image_classification/main.py.
+An example of all function calls described in the documentation (see Overview) is provided in silknow_image_classification/main.py (https://github.com/silknow/image-classification/blob/master/silknow_image_classification/main.py).
