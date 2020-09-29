@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 here = path.abspath(path.dirname(__file__))
 
@@ -11,23 +11,8 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 # get the dependencies and installs
-#with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
-#    all_reqs = f.read().split('\n')
-all_reqs = ['#Dev/Deployment',
-			'sphinx',
-			'sphinx_rtd_theme',
-			'nose',
-			'coverage',
-			'pypi-publisher',
-			'urllib3',
-			'numpy',
-			'pandas',
-			'tqdm',
-			'tensorflow==1.13.1',
-			'tensorflow-hub==0.6.0',
-			'matplotlib',
-			'sklearn',
-			'xlrd']
+with open(path.join(here, 'requirements.txt'), encoding='utf-8') as f:
+    all_reqs = f.read().split('\n')
 
 install_requires = [x.strip() for x in all_reqs if 'git+' not in x]
 dependency_links = [x.strip().replace('git+', '') for x in all_reqs if x.startswith('git+')]
@@ -35,10 +20,11 @@ dependency_links = [x.strip().replace('git+', '') for x in all_reqs if x.startsw
 setup(
     name='silknow_image_classification',
     version=__version__,
-    description='""',
+    description='A python package that can perform image classification.',
     long_description=long_description,
-    url='https://github.com/silknow/image-classification',
-    download_url='',
+    long_description_content_type='text/markdown',
+    url='https://github.com/Dorozynski/silknow_image_classification',
+    download_url='https://github.com/Dorozynski/silknow_image_classification/tarball/' + __version__,
     license='BSD',
     classifiers=[
       'Development Status :: 3 - Alpha',
@@ -46,10 +32,10 @@ setup(
       'Programming Language :: Python :: 3',
     ],
     keywords='',
-    packages=find_packages(where='.', exclude=['docs', 'tests*']),
-	include_package_data=True,
+    packages=find_packages(exclude=['docs', 'tests*']),
+    include_package_data=True,
     author='LUH',
     install_requires=install_requires,
     dependency_links=dependency_links,
-    author_email='clermont@ipi.uni-hannover.de'
+    author_email='dorozynski@ipi.uni-hannover.de'
 )

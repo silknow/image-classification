@@ -39,7 +39,4 @@ docs/_build
 # Cookiecutter
 output/
 
-silknow_image_classification/samples/img/
-silknow_image_classification/samples/img_classification/
-silknow_image_classification/logfiles/
-*.ipynb
+silknow_image_classification/samples/data/*

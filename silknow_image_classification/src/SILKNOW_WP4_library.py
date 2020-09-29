@@ -106,9 +106,7 @@ def get_image_paths_from_collection(master_dir, collections_file,
 
 
 # from: train_ResNet_152_V2_MTL.py
-def collections_list_to_image_lists(collections_list, labels_2_learn,
-                                    min_samples_per_class, master_dir,
-                                    bool_CrossVal):
+def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir):
     r"""Creates image_lists.
     
     :Arguments\::
@@ -124,11 +122,6 @@ def collections_list_to_image_lists(collections_list, labels_2_learn,
             The name of the '#label' that shall be learnt. It is of special
             interest if more than one label is given per image in the
             collections.txt.
-        :min_samples_per_class (*int*)\::
-            An integer that specifies the minimum number of samples per class
-            that are desired. If the number of samples is less, the class
-            won't be considered in learning and the samples are rejected from
-            learning without data gaps.
         :master_dir (*string*)\::
             This variable is a string and contains the name of the master file.
             The master file has to contain a list of the "collection.txt".
@@ -186,23 +179,11 @@ def collections_list_to_image_lists(collections_list, labels_2_learn,
             else:
                 label_2_image[class_label].append(image_name)
         coll_id.close()
-                
-#    # The following lines were relevant for references that did not consider
-#    # min_samples_per_class
-#    classes_2_delete = []
-#    for c_label in collections_dict.keys():
-#        if len(collections_dict[c_label]) < min_samples_per_class:
-#            classes_2_delete.append(c_label)
-#    for c_2_del in classes_2_delete:
-#        del collections_dict[c_2_del]
-#        print('The label', c_2_del, 'has less than', min_samples_per_class,
-#              'samples in the class', c_2_del,
-#              'and is therefore excluded from training!\n',
-#              'Increase "min_samples_per_class" in the control file to consider that class.\n\n')
-    
-#    if not bool_CrossVal:
+
     if 'NaN' in collections_dict.keys():
         del collections_dict['NaN']
+    if 'nan' in collections_dict.keys():
+        del collections_dict['nan']
             
     collections_dict = collections.OrderedDict(sorted(collections_dict.items()))
 #    print('The following classes will be learnt for the label',
@@ -212,9 +193,7 @@ def collections_list_to_image_lists(collections_list, labels_2_learn,
 
 
 # from: train_ResNet_152_V2_MTL.py
-def collections_list_MTL_to_image_lists(collections_list, labels_2_learn,
-                                        min_samples_per_class, master_dir,
-                                        bool_CrossVal):
+def collections_list_MTL_to_image_lists(collections_list, labels_2_learn, master_dir):
     r"""Creates image_lists.
     
     :Arguments\::
@@ -230,11 +209,6 @@ def collections_list_MTL_to_image_lists(collections_list, labels_2_learn,
             The name of the '#label' that shall be learnt. It is of special
             interest if more than one label is given per image in the
             collections.txt.
-        :min_samples_per_class (*int*)\::
-            An integer that specifies the minimum number of samples per class
-            that are desired. If the number of samples is less, the class
-            won't be considered in learning and the samples are rejected from
-            learning without data gaps.
         :master_dir (*string*)\::
             This variable is a string and contains the name of the master file.
             The master file has to contain a list of the "collection.txt".
@@ -267,12 +241,11 @@ def collections_list_MTL_to_image_lists(collections_list, labels_2_learn,
         temp_label_dict, temp_im2label_dict = collections_list_to_image_lists(
                                                             collections_list,
                                                             [im_label],
-                                                            min_samples_per_class,
-                                                            master_dir,
-                                                            bool_CrossVal)
+                                                            master_dir)
         collections_dict_MTL[im_label] = temp_label_dict
         label_2_image_dict = {**label_2_image_dict, **temp_im2label_dict}
-    
+
+    # if a label is missing, image_2_label_dict will contain 'nan'
     for im_label in collections_dict_MTL.keys():
         for class_label in collections_dict_MTL[im_label]:
             for image in collections_dict_MTL[im_label][class_label]:
@@ -280,12 +253,17 @@ def collections_list_MTL_to_image_lists(collections_list, labels_2_learn,
                     temp_label_dict = {}
                     temp_label_dict[im_label] = [class_label]
                     for im_label_2 in collections_dict_MTL.keys():
+                        class_label_known = False
                         for class_label_2 in collections_dict_MTL[im_label_2]:
                             if image in collections_dict_MTL[im_label_2][class_label_2]:
                                 temp_label_dict[im_label_2] = [class_label_2]
+                                class_label_known = True
+                        if not class_label_known:
+                            temp_label_dict[im_label_2] = ['nan']
                     full_image_name = os.path.abspath(
                                         os.path.join(master_dir, image))
                     image_2_label_dict[full_image_name] = temp_label_dict
+
                 
     return collections_dict_MTL, image_2_label_dict
 
@@ -301,11 +279,6 @@ def plot_confusion_matrix(cm, classes,
     """
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        print("Normalized confusion matrix")
-    else:
-        print('Confusion matrix, without normalization')
-
-    print(cm)
     
 #    plt.rcParams["figure.figsize"] = [8, 8]
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -327,97 +300,84 @@ def plot_confusion_matrix(cm, classes,
     plt.xlabel('Predicted label')
     
 
-# from: train_ResNet_152_V2_MTL.py
 def estimate_quality_measures(ground_truth, prediction, list_class_names,
-                              prefix_plot, res_folder_name,
-                              how_many_training_steps, bool_MTL):
+                              prefix_plot, res_folder_name):
     r"""
     """
     if not os.path.exists(res_folder_name):
         os.makedirs(res_folder_name)
-        
+
     # Confusin Matrix (unnormalized)
-    #print("ground_truth:",np.asarray(ground_truth))
-    #print("prediction:",np.asarray(prediction))
-    conf_mat = confusion_matrix(np.asarray(ground_truth), 
+    # print("ground_truth:",np.asarray(ground_truth))
+    # print("prediction:",np.asarray(prediction))
+    conf_mat = confusion_matrix(np.asarray(ground_truth),
                                 np.asarray(prediction))
     fig_conf_mat = plt.figure()
-    plot_confusion_matrix(conf_mat, 
+    plot_confusion_matrix(conf_mat,
                           classes=list_class_names,
                           title='Confusion matrix')
-#    plt.show()
+    #    plt.show()
     fig_conf_mat.savefig(res_folder_name + '/' + prefix_plot +
-                         '_Confusion_Matrix.jpg')
-  
+                         '_Confusion_Matrix.png')
+
     # Confusin Matrix (normalized)
-    conf_mat = confusion_matrix(np.asarray(ground_truth), 
+    conf_mat = confusion_matrix(np.asarray(ground_truth),
                                 np.asarray(prediction))
     fig_conf_mat_norm = plt.figure()
-    plot_confusion_matrix(conf_mat, 
-                          classes=list_class_names, 
+    plot_confusion_matrix(conf_mat,
+                          classes=list_class_names,
                           normalize=True,
                           title='Normalized confusion matrix')
-#    plt.show()
+    #    plt.show()
     fig_conf_mat_norm.savefig(res_folder_name + '/' + prefix_plot +
-                              '_Confusion_Matrix_normalized.jpg')
-    
+                              '_Confusion_Matrix_normalized.png')
+
     # f1-scores
-    f1_None     = f1_score(np.asarray(ground_truth), 
-                         np.asarray(prediction), 
-                         average=None)  
-    
+    f1_None = f1_score(np.asarray(ground_truth),
+                       np.asarray(prediction),
+                       average=None)
+
     # Precision
-    precision_None     = precision_score(np.asarray(ground_truth), 
-                                       np.asarray(prediction), 
-                                       average=None)
-  
+    precision_None = precision_score(np.asarray(ground_truth),
+                                     np.asarray(prediction),
+                                     average=None)
+
     # Recall
-    recall_None     = recall_score(np.asarray(ground_truth), 
-                                       np.asarray(prediction), 
-                                       average=None)
-    
+    recall_None = recall_score(np.asarray(ground_truth),
+                               np.asarray(prediction),
+                               average=None)
+
     # Write results to file
-    data_amount = len(ground_truth) 
-    overall_accuracy = accuracy_score(np.asarray(ground_truth), 
-                                       np.asarray(prediction))
+    data_amount = len(ground_truth)
+    overall_accuracy = accuracy_score(np.asarray(ground_truth),
+                                      np.asarray(prediction))
     text_file_result = open(res_folder_name + '/' + prefix_plot +
-                            "_evaluation_results.txt", "w")  
-    text_file_result.write("Total amount of data (" + prefix_plot + "): " + 
-                           str(data_amount) + " images \n \n")  
-    text_file_result.write("Overall Accuracy: %.2f %% \n \n" % 
-                         (overall_accuracy*100))
-    text_file_result.write("Class       \t Precision   \t Recall  \t f1-score \tContribution\n")
-    text_file_result.write("            \t [%]         \t [%]     \t [%]      \n")
-    for classes_index, class_name in enumerate(list_class_names):    
-        if bool_MTL:
-            text_file_result.write("%s \t\t %.2f        \t %.2f    \t %.2f   \t %d \n" %
-                         (class_name,
-                          precision_None[classes_index]*100,
-                          recall_None[classes_index]*100,
-                          f1_None[classes_index]*100,
-                          (ground_truth == classes_index).sum()))
-        else:
-            if not isinstance(ground_truth, np.ndarray):
-                text_file_result.write("%s \t\t %.2f        \t %.2f    \t %.2f   \t %d \n" %
-                         (class_name,
-                          precision_None[classes_index]*100,
-                          recall_None[classes_index]*100,
-                          f1_None[classes_index]*100,
-                          ground_truth.count(classes_index)))
-            else:
-                text_file_result.write("%s \t\t %.2f        \t %.2f    \t %.2f   \t %d \n" %
-                         (class_name,
-                          precision_None[classes_index]*100,
-                          recall_None[classes_index]*100,
-                          f1_None[classes_index]*100,
-                          (ground_truth == classes_index).sum()))
-    text_file_result.write("Average     \t %.2f        \t %.2f    \t %.2f \n" %
-                         (np.mean(precision_None)*100, np.mean(recall_None)*100,
-                          np.mean(f1_None)*100))
-  
+                            "_evaluation_results.txt", "w")
+    text_file_result.write("Total amount of data (" + prefix_plot + "): " +
+                           str(data_amount) + " images \n \n")
+    text_file_result.write("Overall Accuracy: %.2f %% \n \n" %
+                           (overall_accuracy * 100))
+
+    maxStringLength = max(list(map(lambda x: len(x), list_class_names+["Average"])))+4
+    text_file_result.write("{:{width}}".format("Class",width=maxStringLength))
+    text_file_result.write("Precision [%]    Recall [%]    f1-score [%]    Contribution\n")
+
+    for classes_index, class_name in enumerate(list_class_names):
+        text_file_result.write("{:{width}}".format(class_name,width=maxStringLength))
+        text_file_result.write("{:>{width}.2f}".format(precision_None[classes_index] * 100,width=len("Precision [%]")))
+        text_file_result.write("{:>{width}.2f}".format(recall_None[classes_index] * 100,width=len("Recall [%]")+4))
+        text_file_result.write("{:>{width}.2f}".format(f1_None[classes_index] * 100,width=len("f1-score [%]")+4))
+        text_file_result.write("{:>{width}}\n".format((ground_truth == classes_index).sum(),
+                                                      width=len("Contribution")+4))
+
+    text_file_result.write("\n{:{width}}".format("Average",width=maxStringLength))
+    text_file_result.write("{:>{width}.2f}".format(np.mean(precision_None) * 100,width=len("Precision [%]")))
+    text_file_result.write("{:>{width}.2f}".format(np.mean(recall_None) * 100,width=len("Recall [%]")+4))
+    text_file_result.write("{:>{width}.2f}".format(np.mean(f1_None) * 100,width=len("f1-score [%]")+4))
+
     text_file_result.close()
     plt.close('all')
-    
+
 
 def get_statistic_dict(num_labels, coll_dict, relevant_labels):
     r"""Creates statistic_dict.
@@ -464,7 +424,7 @@ def get_statistic_dict(num_labels, coll_dict, relevant_labels):
 
 def make_label_statistics(class_label_list, output_path, output_file,
                           label):
-    full_fig_name = os.path.join(output_path, output_file + '.jpg')
+    full_fig_name = os.path.join(output_path, output_file + '.png')
     full_txt_name = os.path.join(output_path, output_file + '.txt')
     classes = list(set(class_label_list))
     counts  = []
@@ -520,7 +480,7 @@ def plot_cooccurence_matrix(cm, classes,
     plt.subplots_adjust(bottom=0.15)
     
     if result_folder is not None:
-        fig_id.savefig(os.path.join(result_folder, title + '.jpg')) 
+        fig_id.savefig(os.path.join(result_folder, title + 'png'))
     
 def get_cooccurence_statistic(statistic_dict, coll_dict, result_folder=None):
     r"""Plots one cooccurence matrix for each possible level of incompleteness.
@@ -565,74 +525,78 @@ def get_cooccurence_statistic(statistic_dict, coll_dict, result_folder=None):
     # print cooccurences independent of incompleteness
     plot_cooccurence_matrix(np.sum(coocmat, axis=-1), class_list, 
                             title='Cooccurence matrix - ignoring level of incompleteness', 
-                            result_folder=result_folder)    
+                            result_folder=result_folder)
 
 
-def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_shear = None,
-                          random_brightness = None, random_crop = None, random_rotation = None,
-                          random_contrast = None, random_hue = None, random_saturation = None,
-                          random_rotation90 = None, gaussian_noise = None, input_im_tensor = None):
+def add_data_augmentation(aug_set_dict, input_im_tensor):
     r"""Realizes data augmentation.
-    
+
     :Arguments\::
-        :flip_left_right (*bool*)\::
+        :aug_set_dict (*dictionary*)\::
+            The keys of aug_set_dict are the transformations that will be applied
+            during data augmentation, the values are the corresponding transformation
+            parameters. The options for augmentations are the following:
+
+            :flip_left_right (*bool*)\::
             Whether to randomly mirrow the image horizontally along its
             vertical centre line.
-        :flip_up_down (*bool*)\::
-            Whether to randomly mirrow the image vertically along its
-            horizontal centre line.
-        :random_shear (*list*)\::
-            The list contains float value ranges from which the parameters for
-            shearing horizontally (hor) and vertically (vert) will be drawn:
-                [lower bound hor, upper boudn hor, lower bound vert,
-                upper bound vert]
-        :random_brightness (*float*)\::
-            Multiplies all image channels independently of all pixels by a
-            random value out of the range
-            [1 - random_brightness/100; 1 + random_brightness/100].
-        :random_crop (*list*)\::
-            Range of float fractions for centrally cropping the image. The crop fraction
-            is drawn out of the provided range [lower bound, upper bound], 
-            i.e. the first and second values of random_crop.
-        :random_rotation (*float*)\::
-            Randomly rotates the image counter clockwise by a random angle in
-            the range [-random_rotation; +random_rotation]. The angle has to be
-            given in radians.
-        :random_contrast (*list*)\::
-           Adjusts the contrast of an image or images by a random factor. 
-           random_contrast has to be an array with 2 values. The first value
-           is the lower bound for the random factor, the second value is the
-           upper bound for the random factor.
-        :random_hue (*float*)\::
-           Adjusts the hue of RGB images by a random factor. random_hue has to
-           be between 0 and 0.5. The hue will be adjusted by a random factor
-           picked from the interval [-random_hue, random_hue]
-        :random_saturation (*list*)\::
-           Adjusts the saturation of an image or images by a random factor. 
-           random_saturation has to be an array with 2 values. The first value
-           is the lower bound for the random factor, the second value is the
-           upper bound for the random factor.
-        :random_rotation90 (*bool*)\::
-            If True, the image will be rotated counter-clockwise by 90 degrees
-            (with a chance of 50%).
-        :gaussian_noise (*float*)\::
-            Adds gaussian noise to the image. The noise will be samples from a
-            gaussian distribution with zero mean and a standard deviation of 
-            gaussian_noise. 
+            :flip_up_down (*bool*)\::
+                Whether to randomly mirrow the image vertically along its
+                horizontal centre line.
+            :random_shear (*list*)\::
+                The list contains float value ranges from which the parameters for
+                shearing horizontally (hor) and vertically (vert) will be drawn:
+                    [lower bound hor, upper boudn hor, lower bound vert,
+                    upper bound vert]
+            :random_brightness (*float*)\::
+                Multiplies all image channels independently of all pixels by a
+                random value out of the range
+                [1 - random_brightness/100; 1 + random_brightness/100].
+            :random_crop (*list*)\::
+                Range of float fractions for centrally cropping the image. The crop fraction
+                is drawn out of the provided range [lower bound, upper bound],
+                i.e. the first and second values of random_crop.
+            :random_rotation (*float*)\::
+                Randomly rotates the image counter clockwise by a random angle in
+                the range [-random_rotation; +random_rotation]. The angle has to be
+                given in radians.
+            :random_contrast (*list*)\::
+               Adjusts the contrast of an image or images by a random factor.
+               random_contrast has to be an array with 2 values. The first value
+               is the lower bound for the random factor, the second value is the
+               upper bound for the random factor.
+            :random_hue (*float*)\::
+               Adjusts the hue of RGB images by a random factor. random_hue has to
+               be between 0 and 0.5. The hue will be adjusted by a random factor
+               picked from the interval [-random_hue, random_hue]
+            :random_saturation (*list*)\::
+               Adjusts the saturation of an image or images by a random factor.
+               random_saturation has to be an array with 2 values. The first value
+               is the lower bound for the random factor, the second value is the
+               upper bound for the random factor.
+            :random_rotation90 (*bool*)\::
+                If True, the image will be rotated counter-clockwise by 90 degrees
+                (with a chance of 50%).
+            :gaussian_noise (*float*)\::
+                Adds gaussian noise to the image. The noise will be samples from a
+                gaussian distribution with zero mean and a standard deviation of
+                gaussian_noise.
+
         :input_im_tensor (*tensor*)\::
             The input image that will be transformed. Must be a tensor of rank 3,
-            with sizes [image_height, image_width, image_channels]
-    
+            with sizes [image_height, image_width, image_channels]. The sizes are
+            already the ones expected by the network.
+
     :Returns\::
         : tranformed_image (*tensor*)\::
             The output image after applying the transformations. Is the same type
             as input_im_tensor.
-    
+
     """
-    assert input_im_tensor is not None, "No image was provided to the data augmentation!"
     tranformed_image = input_im_tensor
-    
-    if random_rotation is not None:
+
+    if "random_rotation" in aug_set_dict.keys():
+        random_rotation = aug_set_dict["random_rotation"]
         # added: random_rotation
         rotation_min  = -random_rotation
         rotation_max =  random_rotation
@@ -641,7 +605,10 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
                                            maxval=rotation_max)
         tranformed_image  = tf.contrib.image.rotate(tranformed_image,
                                                  rotation_value)
-    if random_rotation90 is not None:
+
+    if "random_rotation90" in aug_set_dict.keys():
+        random_rotation90 = aug_set_dict["random_rotation90"]
+    #if random_rotation90 is not None:
         # added: randomly rot90
         if random_rotation90:
             rot90_indicator = tf.random_uniform(shape=[], minval=0, maxval=1)
@@ -651,17 +618,23 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
                                     lambda: tf.image.rot90(tranformed_image, k = 0))
         else:
             tranformed_image = tranformed_image
-    
-    if flip_left_right is not None:
+
+    if "flip_left_right" in aug_set_dict.keys():
+        flip_left_right = aug_set_dict["flip_left_right"]
+    #if flip_left_right is not None:
         if flip_left_right:
             tranformed_image = tf.image.random_flip_left_right(tranformed_image)
 
-    if flip_up_down is not None:
+    if "flip_up_down" in aug_set_dict.keys():
+        flip_up_down = aug_set_dict["flip_up_down"]
+    #if flip_up_down is not None:
         # added: random_flip_up_down
         if flip_up_down:
             tranformed_image = tf.image.random_flip_up_down(tranformed_image)
-  
-    if random_brightness is not None:
+
+    if "random_brightness" in aug_set_dict.keys():
+        random_brightness = aug_set_dict["random_brightness"]
+    #if random_brightness is not None:
         # brightness
         brightness_min   = 1.0 - (random_brightness / 100.0)
         brightness_max   = 1.0 + (random_brightness / 100.0)
@@ -669,8 +642,10 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
                                        minval=brightness_min,
                                        maxval=brightness_max)
         tranformed_image = tf.multiply(tranformed_image, brightness_value)
-  
-    if random_contrast is not None:
+
+    if "random_contrast" in aug_set_dict.keys():
+        random_contrast = aug_set_dict["random_contrast"]
+    #if random_contrast is not None:
         # added: random_contrast
         # contrast_min >= 0, contrast_min < contrast_max!
         assert random_contrast[0] >= 0, "Minimum Contrast has to be larger than 0!"
@@ -679,14 +654,19 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
         contrast_max      = random_contrast[1]
         tranformed_image  = tf.image.random_contrast(tranformed_image,
                                                contrast_min,
-                                               contrast_max)  
-    if random_hue is not None:
+                                               contrast_max)
+
+    if "random_hue" in aug_set_dict.keys():
+        random_hue = aug_set_dict["random_hue"]
+    #if random_hue is not None:
         # added: random_hue
         # random_hue in [0, 0.5]!
         hue_value  = random_hue
         tranformed_image = tf.image.random_hue(tranformed_image, hue_value)
-    
-    if random_saturation is not None:
+
+    if "random_saturation" in aug_set_dict.keys():
+        random_saturation = aug_set_dict["random_saturation"]
+    #if random_saturation is not None:
         # added: random_saturation
         # saturation_min >= 0, saturation_min < saturation_max!
         assert random_saturation[0] >= 0, "Minimum Saturation has to be larger than 0!"
@@ -695,8 +675,11 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
         saturation_max   = random_saturation[1]
         tranformed_image  = tf.image.random_saturation(tranformed_image,
                                                 saturation_min,
-                                                saturation_max)  
-    if random_shear is not None:
+                                                saturation_max)
+
+    if "random_shear" in aug_set_dict.keys():
+        random_shear = aug_set_dict["random_shear"]
+    #if random_shear is not None:
         # added: random_shear
         shear_w = tf.random_uniform(shape=[],
                                     minval = random_shear[0],
@@ -709,153 +692,121 @@ def add_data_augmentation(flip_left_right = None, flip_up_down = None, random_sh
                         0, 0]
         tranformed_image = tf.contrib.image.transform(tranformed_image,
                                              trafo_matrix)
-        
-    if random_crop is not None:
+
+    if "random_crop" in aug_set_dict.keys():
+        random_crop = aug_set_dict["random_crop"]
+    #if random_crop is not None:
         # added: random_crop
         crop_fraction = random.uniform(random_crop[0], random_crop[1])
         tranformed_image = tf.image.central_crop(tranformed_image, crop_fraction)
-        
-    if gaussian_noise is not None:
+        if crop_fraction < 1:
+            # resizing to the network input dimensions (bilinear interpolation)
+            input_height = tf.shape(input_im_tensor)[0]
+            input_width = tf.shape(input_im_tensor)[1]
+            resize_shape = tf.stack([input_height, input_width])
+            resize_shape_as_int = tf.cast(resize_shape, dtype=tf.int32)
+            resized_image_tensor = tf.image.resize_images(tranformed_image,
+                                                          resize_shape_as_int)
+            tranformed_image = resized_image_tensor
+
+    if "gaussian_noise" in aug_set_dict.keys():
+        gaussian_noise = aug_set_dict["gaussian_noise"]
+    #if gaussian_noise is not None:
         noise = tf.random_normal(shape=tf.shape(tranformed_image), mean=0.0, stddev=gaussian_noise, dtype=tf.float32)
         tranformed_image = tf.clip_by_value(tranformed_image + noise, 0.0, 1.0)
-        
+
     return tranformed_image
 
 
-   
-def add_jpeg_decoding(input_height, input_width, input_depth, module_spec,
-                      bool_hub_module,
-                      bool_data_aug, aug_set_dict, crop_aspect_ratio=1):
+def add_jpeg_decoding(module_spec, crop_aspect_ratio=1):
     r"""Adds operations that perform JPEG decoding and resizing to the graph.
-    
-    :Arguments\::
-        :input_height (*int*)\::
-            Height of the input image. Can be ignored if a hub module is used.
-        :input_width (*int*)\::
-            Width of the input image. Can be ignored if a hub module is used.
-        :input_depth (*int*)\::
-            Channels of the input image. Can be ignored if a hub module is used.
-        :module_spec (*module*)\::
-            The hub.ModuleSpec for the image module being used.
-        :bool_hub_module (*bool*)\::
-            If True, a tensorflow hub module has to be chosen for the feature
-            extraction by setting a valid URL for *tfhub_module*.
-            If False, the currently implemented model in *setup_siamese_CNN()*
-            will be fully trained to obtain a descriptor per image. As the
-            model is fully convolutional, the user has to define an input size
-            via setting *input_height*, *input_width* and *input_depth*.
-        :bool_data_aug (*bool*)\::
-            If True, data augmentation will be applied.
-        :aug_set_dict (*dictionary*)\::
-            The keys of aug_set_dict are the transformations that will be applied
-            during data augmentation, the values are the corresponding transformation
-            parameters. Detailed information about names and parameters of transformations
-            are in the documentation of add_data_augmentation.
-        :crop_aspect_ratio (*float*)\::
-            If greater than 1, images will be cropped to their central square when their aspect ratio is
-            greater than crop_aspect_ratio. 
-            For example, an image with a height of 200 and a width of 400 has an aspect ratio of 2.
-            When crop_aspect_ratio is set to 1.5, the exemplary image will be cropped to the region
-            hmin=0 hmax=200 wmin=100 wmax=300.
 
-    :Returns\::
-        :jpeg_data_tensor (*tensor*)\::
-            Tensor to feed JPEG data into it.
-        :resized_image_tensor (*tensor*)\::
-            Tensor that contains the result of the preprocessing steps.
-    """
-    if bool_hub_module:
-        input_height, input_width = hub.get_expected_image_size(module_spec)
-        input_depth = hub.get_num_image_channels(module_spec)
-        
+        :Arguments\::
+            :input_height (*int*)\::
+                Height of the input image. Can be ignored if a hub module is used.
+            :input_width (*int*)\::
+                Width of the input image. Can be ignored if a hub module is used.
+            :input_depth (*int*)\::
+                Channels of the input image. Can be ignored if a hub module is used.
+            :module_spec (*module*)\::
+                The hub.ModuleSpec for the image module being used.
+            :crop_aspect_ratio (*float*)\::
+                If greater than 1, images will be cropped to their central square when their aspect ratio is
+                greater than crop_aspect_ratio.
+                For example, an image with a height of 200 and a width of 400 has an aspect ratio of 2.
+                When crop_aspect_ratio is set to 1.5, the exemplary image will be cropped to the region
+                hmin=0 hmax=200 wmin=100 wmax=300.
+
+        :Returns\::
+            :jpeg_data_tensor (*tensor*)\::
+                Tensor to feed JPEG data into it.
+            :resized_image_tensor (*tensor*)\::
+                Tensor that contains the result of the preprocessing steps.
+        """
+
+    input_height, input_width = hub.get_expected_image_size(module_spec)
+    input_depth = hub.get_num_image_channels(module_spec)
+
     print('Input dimensions of the pre-trained network:\n',
-        input_height, input_width, input_depth)
-    
+          input_height, input_width, input_depth)
+
     jpeg_data_tensor = tf.placeholder(tf.string, name='DecodeJPGInput')
-    decoded_image    = tf.image.decode_jpeg(jpeg_data_tensor,
+    decoded_image = tf.image.decode_jpeg(jpeg_data_tensor,
                                          channels=input_depth)
     decoded_image_as_float = tf.image.convert_image_dtype(decoded_image,
-                                                        tf.float32)
+                                                          tf.float32)
     decoded_height = tf.cast(tf.shape(decoded_image_as_float)[0], tf.float32)
-    decoded_width  = tf.cast(tf.shape(decoded_image_as_float)[1], tf.float32)
-    
-    if bool_data_aug:
-        if "flip_left_right" not in aug_set_dict.keys(): aug_set_dict["flip_left_right"] = None
-        if "flip_up_down" not in aug_set_dict.keys(): aug_set_dict["flip_up_down"] = None
-        if "random_shear" not in aug_set_dict.keys(): aug_set_dict["random_shear"] = None
-        if "random_brightness" not in aug_set_dict.keys(): aug_set_dict["random_brightness"] = None
-        if "random_crop" not in aug_set_dict.keys(): aug_set_dict["random_crop"] = None
-        if "random_rotation" not in aug_set_dict.keys(): aug_set_dict["random_rotation"] = None
-        if "random_contrast" not in aug_set_dict.keys(): aug_set_dict["random_contrast"] = None
-        if "random_hue" not in aug_set_dict.keys(): aug_set_dict["random_hue"] = None
-        if "random_saturation" not in aug_set_dict.keys(): aug_set_dict["random_saturation"] = None
-        if "random_rotation90" not in aug_set_dict.keys(): aug_set_dict["random_rotation90"] = None
-        if "gaussian_noise" not in aug_set_dict.keys(): aug_set_dict["gaussian_noise"] = None
-        decoded_image_as_float = add_data_augmentation(
-                        flip_left_right=aug_set_dict["flip_left_right"],
-                        flip_up_down=aug_set_dict["flip_up_down"],
-                        random_shear=aug_set_dict["random_shear"],
-                        random_brightness=aug_set_dict["random_brightness"],
-                        random_crop=aug_set_dict["random_crop"],
-                        random_rotation=aug_set_dict["random_rotation"],
-                        random_contrast=aug_set_dict["random_contrast"],
-                        random_hue=aug_set_dict["random_hue"],
-                        random_saturation=aug_set_dict["random_saturation"],
-                        random_rotation90=aug_set_dict["random_rotation90"],
-                        gaussian_noise=aug_set_dict["gaussian_noise"],
-                        input_im_tensor=decoded_image_as_float)
-        
+    decoded_width = tf.cast(tf.shape(decoded_image_as_float)[1], tf.float32)
+
     # Gaussian filtering before downsizing, we assume that the target image size is square
-    sigma      = tf.cast(tf.shape(decoded_image)[0]/input_height, tf.float32)
-    kernelsize = tf.cast(tf.cast(sigma*6, tf.int32) + (1-(tf.cast(sigma*6,
-                         tf.int32)%2)), tf.float32)
-    distr      = tf.distributions.Normal(0.0, sigma)
-    vals       = distr.prob(tf.range(start = -kernelsize,
-                                     limit = kernelsize + 1,
-                                     dtype = tf.float32))
+    sigma = tf.cast(tf.shape(decoded_image)[0] / input_height, tf.float32)
+    kernelsize = tf.cast(tf.cast(sigma * 6, tf.int32) + (1 - (tf.cast(sigma * 6,
+                                                                      tf.int32) % 2)), tf.float32)
+    distr = tf.distributions.Normal(0.0, sigma)
+    vals = distr.prob(tf.range(start=-kernelsize,
+                               limit=kernelsize + 1,
+                               dtype=tf.float32))
     gauss_kernel_2d = tf.einsum('i,j->ij',
-                              vals,
-                              vals)
-    gauss_kernel_2d = gauss_kernel_2d / tf.reduce_sum(gauss_kernel_2d)                           
-    decoded_image_4d = tf.expand_dims(decoded_image_as_float, 0) 
-    gauss_kernel     = tf.tile(gauss_kernel_2d[:, :, tf.newaxis, tf.newaxis],
+                                vals,
+                                vals)
+    gauss_kernel_2d = gauss_kernel_2d / tf.reduce_sum(gauss_kernel_2d)
+    decoded_image_4d = tf.expand_dims(decoded_image_as_float, 0)
+    gauss_kernel = tf.tile(gauss_kernel_2d[:, :, tf.newaxis, tf.newaxis],
                            [1, 1, 3, 1])
-    pointwise_filter = tf.eye(3, batch_shape=[1, 1]) # does nothing
-    bool_downsize    = tf.placeholder(tf.bool)
-    bool_downsize    = tf.cond(input_height<tf.maximum(decoded_height, decoded_width),
-                               lambda: True, lambda: False)
+    pointwise_filter = tf.eye(3, batch_shape=[1, 1])  # does nothing
+    bool_downsize = tf.placeholder(tf.bool)
+    bool_downsize = tf.cond(input_height < tf.maximum(decoded_height, decoded_width),
+                            lambda: True, lambda: False)
     decoded_image_4d = tf.cond(bool_downsize,
                                lambda: tf.nn.separable_conv2d(decoded_image_4d,
-                                                          gauss_kernel,
-                                                          pointwise_filter,
-                                                          strides=[1, 1, 1, 1],
-                                                          padding="SAME"),
-                              lambda: decoded_image_4d)
-                               
-                                   
+                                                              gauss_kernel,
+                                                              pointwise_filter,
+                                                              strides=[1, 1, 1, 1],
+                                                              padding="SAME"),
+                               lambda: decoded_image_4d)
+
     # Crop images to their central square, if their aspect ratio is too large
     decoded_height = tf.cast(tf.shape(decoded_image_4d)[1], tf.float32)
-    decoded_width  = tf.cast(tf.shape(decoded_image_4d)[2], tf.float32)
-    aspect_ratio = tf.minimum(decoded_height/decoded_width,
-                          decoded_width/decoded_height)
+    decoded_width = tf.cast(tf.shape(decoded_image_4d)[2], tf.float32)
+    aspect_ratio = tf.minimum(decoded_height / decoded_width,
+                              decoded_width / decoded_height)
     bool_crop = tf.cond(aspect_ratio < crop_aspect_ratio, lambda: True, lambda: False)
     crop_size = tf.cast(tf.minimum(decoded_height, decoded_width), tf.float32)
-    crop_offset_height = tf.cast(tf.floor(decoded_height/tf.constant(2.) - crop_size/tf.constant(2.)), tf.int32)
-    crop_offset_width  = tf.cast(tf.floor(decoded_width/tf.constant(2.) - crop_size/tf.constant(2.)), tf.int32)
+    crop_offset_height = tf.cast(tf.floor(decoded_height / tf.constant(2.) - crop_size / tf.constant(2.)), tf.int32)
+    crop_offset_width = tf.cast(tf.floor(decoded_width / tf.constant(2.) - crop_size / tf.constant(2.)), tf.int32)
     cropped_image_4d = tf.image.crop_to_bounding_box(decoded_image_4d,
-                                                      crop_offset_height,
-                                                      crop_offset_width,
-                                                      tf.cast(crop_size-1.,tf.int32),
-                                                      tf.cast(crop_size-1.,tf.int32))
+                                                     crop_offset_height,
+                                                     crop_offset_width,
+                                                     tf.cast(crop_size - 1., tf.int32),
+                                                     tf.cast(crop_size - 1., tf.int32))
     decoded_image_4d = tf.cond(bool_crop,
                                lambda: cropped_image_4d,
                                lambda: decoded_image_4d)
-    
-                                     
-    resize_shape         = tf.stack([input_height, input_width])
-    resize_shape_as_int  = tf.cast(resize_shape, dtype=tf.int32)
+
+    resize_shape = tf.stack([input_height, input_width])
+    resize_shape_as_int = tf.cast(resize_shape, dtype=tf.int32)
     resized_image_tensor = tf.image.resize_bilinear(decoded_image_4d,
-                                           resize_shape_as_int)
+                                                    resize_shape_as_int)
     resized_image_tensor = tf.squeeze(resized_image_tensor)
-    
+
     return jpeg_data_tensor, resized_image_tensor
