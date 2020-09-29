@@ -4,7 +4,8 @@ import pandas as pd
 import random
 from tqdm import tqdm
 import tensorflow as tf
-import SILKNOW_WP4_library as wp4lib
+# import SILKNOW_WP4_library as wp4lib
+from . import SILKNOW_WP4_library as wp4lib
 
 
 class SampleHandler:
