@@ -644,6 +644,10 @@ class SampleHandler:
             print("%30s %5s %5s %5s" % ("***" + MTL_task.upper() + "***", "Train", "Valid", "All"))
             for class_ in collections_dict_MTL_train[MTL_task]:
                 amountTrain = len(collections_dict_MTL_train[MTL_task][class_])
-                amountValid = len(collections_dict_MTL_val[MTL_task][class_])
-                print("%30s: %5i %5i %5i" % (class_, amountTrain, amountValid, amountTrain + amountValid))
+                if self.validation_percentage > 0:
+                    amountValid = len(collections_dict_MTL_val[MTL_task][class_])
+                    print("%30s: %5i %5i %5i" % (class_, amountTrain, amountValid, amountTrain + amountValid))
+                else:
+                    amountValid = 0
+                    print("%30s: %5i %5i %5i" % (class_, amountTrain, amountValid, amountTrain + amountValid))
             print("")
