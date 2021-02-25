@@ -8,6 +8,7 @@ import cv2
 import collections
 import xlsxwriter
 
+# TODO: split_check for all images of one object in one collection!!!!!
 """
 Important Note:
 Function calls which are marked with "#FIXED VARIABLES!" expect a fixed set of relevant variables.
@@ -18,12 +19,12 @@ relevant_variables = ["timespan", "place", "material", "technique", "depiction"]
 def createDatasetForCombinedSimilarityLoss(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
                          retainCollections, minNumLabelsPerSample,
                          flagDownloadImages, flagRescaleImages, fabricListFile=None, flagRuleDataset=False,
-                         masterfileRules=None, flagColourAugmentDataset=False):
+                         masterfileRules=None, flagColourAugmentDataset=False,multiLabelsListOfVariables=None):
     # Create standard dataset
     # -> collection_1.txt - collection_5.txt
     createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
                   retainCollections, minNumLabelsPerSample,
-                  flagDownloadImages, flagRescaleImages, fabricListFile=None)
+                  flagDownloadImages, flagRescaleImages, fabricListFile, multiLabelsListOfVariables)
 
     # Create dataset for similarity rules (from domain experts)
     # -> contains samples mentioned in rules
@@ -33,7 +34,7 @@ def createDatasetForCombinedSimilarityLoss(rawCSVFile, imageSaveDirectory, maste
         createDatasetSimilarityRules(rawCSVFile, imageSaveDirectory, masterfileDirectory,
                                      minNumSamplesPerClass, retainCollections, minNumLabelsPerSample,
                                      flagDownloadImages, flagRescaleImages, masterfileDirectory,
-                                     masterfileRules, fabricListFile, "collection_rules")
+                                     masterfileRules, fabricListFile, "collection_rules", multiLabelsListOfVariables)
 
     # Create dataset for augmentation loss
     # -> dataset contains only ADDITIONAL samples that are not in standard and rules dataset
@@ -54,6 +55,17 @@ def createDatasetColourAugment(masterfileDirectory, rawCSVFile, imageSaveDirecto
 
     objects_2_be_added = np.hstack((semantic_df.obj, additional_rule_df.obj))
     df_to_be_added = find_additional_obj_in_csv(rawCSVFile, objects_2_be_added)
+
+    for col in df_to_be_added.columns:
+        if col in ["place", "timespan", "material", "technique", "depiction"]:
+            df_to_be_added[col].values[:] = 'nan'
+
+    if flagDownloadImages:
+        downloadImages(df_to_be_added, imageSaveDirectory)
+    if flagRescaleImages:
+        rescaleImages(imageSaveDirectory)
+    df_to_be_added = filterByExistingImages(df_to_be_added, imageSaveDirectory)
+
     df_to_be_added.to_csv(os.path.join(masterfileDirectory, "image_data_augment_colour.csv"))
 
     dataChunkList = getChunksWithSimilarClassDistributions(df_to_be_added, False)
@@ -66,7 +78,7 @@ def createDatasetColourAugment(masterfileDirectory, rawCSVFile, imageSaveDirecto
 
 
 def find_additional_obj_in_csv(rawCSVFile, obj_already_there):
-    all_img_df = pd.read_csv(rawCSVFile)
+    all_img_df = pd.read_csv(rawCSVFile).set_index("ID")
     all_img_df = formatFieldStrings(all_img_df).fillna('nan')
     all_img_df = convertToImageBasedDataframe(all_img_df)
     all_img_df = discardImagesUsedInMultipleObjects(all_img_df)
@@ -76,22 +88,34 @@ def find_additional_obj_in_csv(rawCSVFile, obj_already_there):
 def createDatasetSimilarityRules(rawCSVFile, imageSaveDirectory, masterfileDirectory,
                                  minNumSamplesPerClass, retainCollections, minNumLabelsPerSample,
                                  flagDownloadImages, flagRescaleImages, master_file_path_similar,
-                                 masterfileRules, fabricListFile, CollectionFileBaseName):
+                                 masterfileRules, fabricListFile, CollectionFileBaseName, multiLabelsListOfVariables):
     dataframe = get_df_for_similarity_loss(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
                                            retainCollections, minNumLabelsPerSample, flagDownloadImages,
                                            flagRescaleImages,
-                                           fabricListFile)
+                                           fabricListFile, multiLabelsListOfVariables)
+
     similar_dict, sim_obj_list = get_uris_of_rule_lists(master_file_path_similar, masterfileRules)
     obj_2_be_added = find_obj_uri_not_in_dataset(sim_obj_list, dataframe)
-    df_to_be_added = get_df_of_obj_only_in_rules(rawCSVFile, obj_2_be_added)
+    df_to_be_added = get_df_of_obj_only_in_rules(rawCSVFile, obj_2_be_added, multiLabelsListOfVariables)
+    for col in df_to_be_added.columns:
+        if col in ["place", "timespan", "material", "technique", "depiction"]:
+            df_to_be_added[col].values[:] = 'nan'
+
+    if flagDownloadImages:
+        downloadImages(df_to_be_added, imageSaveDirectory)
+    if flagRescaleImages:
+        rescaleImages(imageSaveDirectory)
+    df_to_be_added = filterByExistingImages(df_to_be_added, imageSaveDirectory)
+
     df_to_be_added.to_csv(os.path.join(masterfileDirectory, "image_data_rule.csv"))
+    df_to_be_added = pd.read_csv(os.path.join(masterfileDirectory, "image_data_rule.csv")).set_index("ID")
     dataChunkList = getChunksWithSimilarClassDistributions(df_to_be_added, False)
     writeCollectionFiles(dataChunkList, masterfileDirectory, imageSaveDirectory, CollectionFileBaseName)
 
 
 def get_df_for_similarity_loss(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
                                retainCollections, minNumLabelsPerSample, flagDownloadImages, flagRescaleImages,
-                               fabricListFile):
+                               fabricListFile, multiLabelsListOfVariables):
     preprocessRawCSVFile(rawCSVFile=rawCSVFile,
                          imageSaveDirectory=imageSaveDirectory,
                          masterfileDirectory=masterfileDirectory,
@@ -100,10 +124,11 @@ def get_df_for_similarity_loss(rawCSVFile, imageSaveDirectory, masterfileDirecto
                          minNumLabelsPerSample=minNumLabelsPerSample,
                          flagDownloadImages=flagDownloadImages,
                          flagRescaleImages=flagRescaleImages,
-                         fabricListFile = fabricListFile)
+                         fabricListFile = fabricListFile,
+                         multiLabelsListOfVariables = multiLabelsListOfVariables)
 
     dataframeFile = os.path.join(masterfileDirectory, "image_data.csv")
-    dataframe = pd.read_csv(dataframeFile)
+    dataframe = pd.read_csv(dataframeFile).set_index("ID")
     return dataframe
 
 
@@ -130,9 +155,9 @@ def find_obj_uri_not_in_dataset(obj_list, dataset_df):
     return obj_2_be_added
 
 
-def get_df_of_obj_only_in_rules(rawCSVFile, obj_2_be_added):
+def get_df_of_obj_only_in_rules(rawCSVFile, obj_2_be_added, multiLabelsListOfVariables):
     all_img_df = pd.read_csv(rawCSVFile)
-    all_img_df = formatFieldStrings(all_img_df).fillna('nan')
+    all_img_df = formatFieldStrings(all_img_df, multiLabelsListOfVariables).fillna('nan')
     all_img_df = convertToImageBasedDataframe(all_img_df)
     all_img_df = discardImagesUsedInMultipleObjects(all_img_df)
     df_to_be_added = all_img_df[all_img_df["obj"].isin(obj_2_be_added)]
@@ -140,8 +165,9 @@ def get_df_of_obj_only_in_rules(rawCSVFile, obj_2_be_added):
 
 
 def createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
-                         retainCollections, minNumLabelsPerSample,
-                         flagDownloadImages, flagRescaleImages, fabricListFile=None):
+                  retainCollections, minNumLabelsPerSample,
+                  flagDownloadImages, flagRescaleImages, fabricListFile=None,
+                  multiLabelsListOfVariables=None):
     """Creates the collection files containing samples for training and evaluation.
 
     :Arguments\::
@@ -156,6 +182,8 @@ def createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSam
                 Minimum number of samples for each class. Classes with fewer
                 occurences will be ignored and set to unknown. If it is set to 1, all classes from the .csv file
                 will be considered for the creation of the collection files.
+                The same applies for mutli label combinations. Each combinaion has to occurs at least
+                minNumSamplesPerClass times in case that multiple labels per variable are desired.
             :retainCollections (*list*)\::
                 List of strings that defines the museums/collections that
                 are to be used. Data from museums/collections
@@ -175,6 +203,13 @@ def createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSam
             :fabricListFile (*string*)\::
                 Name of a .txt or .csv file that lists all images depicting fabrics. If this parameter is set,
                 all listed images will be included in the dataset. The file has to exist in the masterfileDirectory.
+            :multiLabelsListOfVariables (*list*)\::
+                List of strings describing fields of variables in the rawCSV that contain multiple labels per
+                variable. All variable names listed in multiLabelsListOfVariables will contain multiple labels per variable in
+                addition to the single variables. Given the labels "label_1", "label_2" and "label_3" for one variable
+                of one image, the resulting collection files will contain a label in the format
+                "label_1___label_2___label_3". Such merged labels will be handeled in subsequent function of the image
+                processing module to perform multi-label classification/semantic similarity.
         """
     preprocessRawCSVFile(rawCSVFile=rawCSVFile,
                          imageSaveDirectory=imageSaveDirectory,
@@ -184,7 +219,8 @@ def createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSam
                          minNumLabelsPerSample=minNumLabelsPerSample,
                          flagDownloadImages=flagDownloadImages,
                          flagRescaleImages=flagRescaleImages,
-                         fabricListFile=fabricListFile)
+                         fabricListFile=fabricListFile,
+                         multiLabelsListOfVariables=multiLabelsListOfVariables)
 
     dataframeFile = os.path.join(masterfileDirectory, "image_data.csv")
     ensureClassDistributions = True if minNumSamplesPerClass > 1 else False
@@ -198,7 +234,7 @@ def createDataset(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSam
 
 def preprocessRawCSVFile(rawCSVFile, imageSaveDirectory, masterfileDirectory, minNumSamplesPerClass,
                          retainCollections, minNumLabelsPerSample,
-                         flagDownloadImages, flagRescaleImages, fabricListFile):
+                         flagDownloadImages, flagRescaleImages, fabricListFile, multiLabelsListOfVariables):
     """ Preprocesses the raw csv file (export from knowledge graph).
 
     :Arguments\::
@@ -235,7 +271,12 @@ def preprocessRawCSVFile(rawCSVFile, imageSaveDirectory, masterfileDirectory, mi
         """
 
     dataframe = pd.read_csv(rawCSVFile)
-    dataframe = formatFieldStrings(dataframe).fillna('nan')  # FIXED VARIABLES!
+    museum_overview = np.unique(dataframe.museum)
+    print("museums: ", museum_overview)
+    # material_overview = np.unique(dataframe.material_group)
+    # vgl = material_overview[0]==material_overview[4]
+    dataframe = formatFieldStrings(dataframe, multiLabelsListOfVariables).fillna('nan')  # FIXED VARIABLES!
+    material_overview = np.unique(dataframe.material_group)
     dataframe = convertToImageBasedDataframe(dataframe)  # FIXED VARIABLES!
 
     dataframe = discardImagesUsedInMultipleObjects(dataframe)
@@ -289,7 +330,7 @@ def aggregateClassesAndWriteCollectionFiles(dataframeFile, imageSaveDirectory,
 
 
 # FIXED VARIABLES!
-def formatFieldStrings(dataframe):
+def formatFieldStrings(dataframe, multiLabelsListOfVariables):
     # obj auf URI kürzen
     dataframe.obj = dataframe.obj.apply(lambda x: x.split("/")[-1])
 
@@ -306,37 +347,78 @@ def formatFieldStrings(dataframe):
     # Arrange entries into lists
     dataframe.place_country_code = dataframe.place_country_code.apply(
         lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(","))
-    dataframe.place_country_code = dataframe.place_country_code.apply(lambda x: x[0] if len(x) == 1 else np.nan).apply(
+    bool_place_multi = getBoolMultiLabel(multiLabelsListOfVariables, "place_country_code")
+    dataframe.place_country_code = dataframe.place_country_code.apply(lambda x: x[0] if len(x) == 1 else
+            (createMultiLabelString(sorted(x)) + sorted(x)[-1] if bool_place_multi else 'nan')).apply(
         lambda x: np.nan if x == 'nan' else x)
 
     dataframe.time_label = dataframe.time_label.apply(
         lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(","))
-    dataframe.time_label = dataframe.time_label.apply(lambda x: x[0] if len(x) == 1 else np.nan).apply(
+    bool_time_multi = getBoolMultiLabel(multiLabelsListOfVariables, "time_label")
+    dataframe.time_label = dataframe.time_label.apply(lambda x: x[0] if len(x) == 1 else
+            (createMultiLabelString(sorted(x)) + sorted(x)[-1] if bool_time_multi else 'nan')).apply(
         lambda x: np.nan if x == 'nan' else x)
 
     dataframe.technique_group = dataframe.technique_group.apply(
         lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(","))
-    dataframe.technique_group = dataframe.technique_group.apply(lambda x: x[0] if len(x) == 1 else 'nan')
+    bool_technique_multi = getBoolMultiLabel(multiLabelsListOfVariables, "technique_group")
+    dataframe.technique_group = dataframe.technique_group.apply(lambda x: x[0] if len(x) == 1 else
+        (createMultiLabelString(sorted(x)) + sorted(x)[-1] if bool_technique_multi else 'nan'))
     dataframe.technique_group = dataframe.technique_group.apply(
         lambda x: x.split("/")[-1] if not x == 'nan' else np.nan)
 
     dataframe.material_group = dataframe.material_group.apply(
-        lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(","))
-    dataframe.material_group = dataframe.material_group.apply(lambda x: x[0] if len(x) == 1 else 'nan')
+        lambda x: x.strip("[").strip("]").strip().replace("', '", ",").strip("''").split(","))
+    bool_material_multi = getBoolMultiLabel(multiLabelsListOfVariables, "material_group")
+    dataframe.material_group = dataframe.material_group.apply(lambda x: x[0] if len(x) == 1 else
+        (createMultiLabelString(sorted(x)) + sorted(x)[-1] if bool_material_multi else 'nan'))
     dataframe.material_group = dataframe.material_group.apply(lambda x: x.split("/")[-1] if not x == 'nan' else np.nan)
 
     dataframe.depict_group = dataframe.depict_group.apply(
         lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(","))
-    dataframe.depict_group = dataframe.depict_group.apply(lambda x: x[0] if len(x) == 1 else 'nan')
+    bool_depict_multi = getBoolMultiLabel(multiLabelsListOfVariables, "depict_group")
+    dataframe.depict_group = dataframe.depict_group.apply(lambda x: x[0] if len(x) == 1 else
+        (createMultiLabelString(sorted(x)) + sorted(x)[-1] if bool_depict_multi else 'nan'))
     dataframe.depict_group = dataframe.depict_group.apply(lambda x: x.split("/")[-1] if not x == 'nan' else np.nan)
 
+    # split type urls
+    dataframe.category_group = dataframe.category_group.apply(
+        lambda x: x.strip("[").strip("]").replace("', '", ",").strip("''").split(',')
+    )
+    # get type identifyer
+    dataframe.category_group = dataframe.category_group.apply(
+        lambda x: x[0].split("/")[-1] if len(x) == 1 else [y.split("/")[-1] for y in x])
+    # retain "fabrics" only
+    dataframe.category_group = dataframe.category_group.apply(
+        lambda x: (x if x == "fabrics" else "nan") if isinstance(x, str) else [(y if y == "fabrics" else "nan") for y in x])
+
     return dataframe
+
+
+def getBoolMultiLabel(multiLabelsListOfVariables, variableName):
+    boolMultiLabel = False
+    if not multiLabelsListOfVariables is None:
+        if variableName in multiLabelsListOfVariables:
+            boolMultiLabel = True
+    return boolMultiLabel
+
+
+def createMultiLabelString(x):
+    multiLabelString = ""
+    for labelString in x[0:-1]:
+        multiLabelString = multiLabelString + labelString + "___"
+    # multiLabelString = multiLabelString + x[-1]
+
+    return multiLabelString
 
 
 # FIXED VARIABLES!
 def convertToImageBasedDataframe(dataframe):
     # Vorverarbeitung für Records, ein Record pro Bild
     totallist = []
+    counter = 0
+    counter_img = 0
+    error_file = open("unsolved_image_types.txt", "w")
     for _, row in tqdm(dataframe.iterrows(), total=dataframe.shape[0]):
         varlist = [[row.museum + "__" + row.obj + "__" + URL.split('/')[-1],
                     row.museum,
@@ -347,7 +429,28 @@ def convertToImageBasedDataframe(dataframe):
                     row.material_group,
                     row.technique_group,
                     row.depict_group] for URL in row.deeplink if not URL == 'nan']
-        totallist += varlist
+        if isinstance(row.category_group, str):
+            if row.category_group == "fabrics":
+                totallist += varlist
+                counter_img += len(row.deeplink)
+
+        # else:
+        #     # if len(row.category_group) != len(row.deeplink):
+        #     #     error_file.write(row.obj + "\n")
+        #     #     print(row.obj)
+        #     #     print(row.category_group)
+        #     #     print(row.deeplink)
+        #     #     print("\n\n\n")
+        #     if "fabrics" in row.category_group:
+        #         totallist += varlist
+        #         # print(row.obj)
+        #         # print(row.deeplink)
+        #         # counter +=1
+        #         # counter_img += len(row.deeplink)
+    # print(counter)
+    # print(counter_img)
+
+    error_file.close()
     tl = np.asarray(totallist).transpose()
 
     # Erstelle Datensatz
@@ -453,6 +556,7 @@ def rescaleImages(imageSaveDirectory):
         os.makedirs(imgpath_save)
 
     imglist = os.listdir(imgpath_load)
+    print(len(imglist))
 
     # for img_file in tqdm(imglist):
     deadlist_load = []
@@ -510,6 +614,14 @@ def filterByExistingImages(dataframe, imageSaveDirectory):
     onlyfiles = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f))]
     onlyfiles = list(dict.fromkeys(onlyfiles))
     intersection_set = list(set.intersection(set(onlyfiles), set(list(dataframe["ID"]))))
+    # print(len(set(list(dataframe["ID"]))))
+    # print(len(set(onlyfiles)))
+    # print(len(intersection_set))
+    missing_list = [missing for missing in list(dataframe["ID"]) if missing not in onlyfiles]
+    print(len(missing_list))
+    missing_df = pd.DataFrame({"images": missing_list})
+    missing_df.to_csv("missing_images.csv")
+    # print("\n\n")
     dataframe = dataframe.set_index("ID").loc[[f for f in intersection_set]]
 
     return dataframe
@@ -576,7 +688,7 @@ def getChunksWithSimilarClassDistributions(dataframe, ensureClassDistributions):
                     unique_labels_dict[var])
                 random_chunk_split_is_ok = random_chunk_split_is_ok and class_labels_are_matching
             dataChunkList.append(df_chunk)
-
+            # random_chunk_split_is_ok=True##############################
         if not random_chunk_split_is_ok and ensureClassDistributions:
             try_counter += 1
             print("Unlucky data split, retrying with new random split...")

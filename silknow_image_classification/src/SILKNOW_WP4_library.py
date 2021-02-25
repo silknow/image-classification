@@ -106,7 +106,8 @@ def get_image_paths_from_collection(master_dir, collections_file,
 
 
 # from: train_ResNet_152_V2_MTL.py
-def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir):
+def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir, multiLabelsListOfVariables=None,
+                                    bool_unlabeled_dataset=None):
     r"""Creates image_lists.
     
     :Arguments\::
@@ -167,6 +168,13 @@ def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir
             image_path  = im_line.split('\t')[0]
             class_label = im_line.split('\t')[ind_label_2_extract].replace('\n', '')
 
+            if multiLabelsListOfVariables is None:
+                if "___" in class_label:
+                    class_label = 'nan'
+            else:
+                if labels_2_learn[0] not in multiLabelsListOfVariables and "___" in class_label:
+                    class_label = 'nan'
+
             image_name  = image_path.split('/')[-1]
             
             if class_label not in collections_dict.keys():
@@ -180,9 +188,9 @@ def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir
                 label_2_image[class_label].append(image_name)
         coll_id.close()
 
-    if 'NaN' in collections_dict.keys():
+    if 'NaN' in collections_dict.keys() and bool_unlabeled_dataset is None:
         del collections_dict['NaN']
-    if 'nan' in collections_dict.keys():
+    if 'nan' in collections_dict.keys() and bool_unlabeled_dataset is None:
         del collections_dict['nan']
             
     collections_dict = collections.OrderedDict(sorted(collections_dict.items()))
@@ -193,7 +201,9 @@ def collections_list_to_image_lists(collections_list, labels_2_learn, master_dir
 
 
 # from: train_ResNet_152_V2_MTL.py
-def collections_list_MTL_to_image_lists(collections_list, labels_2_learn, master_dir):
+def collections_list_MTL_to_image_lists(collections_list, labels_2_learn, master_dir,
+                                        multiLabelsListOfVariables=None,
+                                        bool_unlabeled_dataset=None):
     r"""Creates image_lists.
     
     :Arguments\::
@@ -232,16 +242,17 @@ def collections_list_MTL_to_image_lists(collections_list, labels_2_learn, master
             #labels as value. It's needed for the estimation of the multitask
             loss.
             
-            image_2_label_dict[full_image_name][#label_1, ..., #label_N]
+            image_2_label_dict[full_image_name][variable_name][class_name]
     """
     collections_dict_MTL = {}
     image_2_label_dict   = {}
     label_2_image_dict   = {}
     for im_label in labels_2_learn:
-        temp_label_dict, temp_im2label_dict = collections_list_to_image_lists(
-                                                            collections_list,
-                                                            [im_label],
-                                                            master_dir)
+        temp_label_dict, temp_im2label_dict = collections_list_to_image_lists(collections_list,
+                                                                              [im_label],
+                                                                              master_dir,
+                                                                              multiLabelsListOfVariables,
+                                                                              bool_unlabeled_dataset)
         collections_dict_MTL[im_label] = temp_label_dict
         label_2_image_dict = {**label_2_image_dict, **temp_im2label_dict}
 
@@ -263,8 +274,7 @@ def collections_list_MTL_to_image_lists(collections_list, labels_2_learn, master
                     full_image_name = os.path.abspath(
                                         os.path.join(master_dir, image))
                     image_2_label_dict[full_image_name] = temp_label_dict
-
-                
+    
     return collections_dict_MTL, image_2_label_dict
 
 
@@ -600,7 +610,7 @@ def add_data_augmentation(aug_set_dict, input_im_tensor):
         # added: random_rotation
         rotation_min  = -random_rotation
         rotation_max =  random_rotation
-        rotation_value = tf.random_uniform(shape=[],
+        rotation_value = tf.random.uniform(shape=[],
                                            minval=rotation_min,
                                            maxval=rotation_max)
         tranformed_image  = tf.contrib.image.rotate(tranformed_image,
@@ -611,7 +621,7 @@ def add_data_augmentation(aug_set_dict, input_im_tensor):
     #if random_rotation90 is not None:
         # added: randomly rot90
         if random_rotation90:
-            rot90_indicator = tf.random_uniform(shape=[], minval=0, maxval=1)
+            rot90_indicator = tf.random.uniform(shape=[], minval=0, maxval=1)
             test_rot90 = tf.constant(0.5, dtype = tf.float32)
             tranformed_image = tf.cond(rot90_indicator >= test_rot90,
                                     lambda: tf.image.rot90(tranformed_image, k = 1),
@@ -638,7 +648,7 @@ def add_data_augmentation(aug_set_dict, input_im_tensor):
         # brightness
         brightness_min   = 1.0 - (random_brightness / 100.0)
         brightness_max   = 1.0 + (random_brightness / 100.0)
-        brightness_value = tf.random_uniform(shape=[],
+        brightness_value = tf.random.uniform(shape=[],
                                        minval=brightness_min,
                                        maxval=brightness_max)
         tranformed_image = tf.multiply(tranformed_image, brightness_value)
@@ -681,10 +691,10 @@ def add_data_augmentation(aug_set_dict, input_im_tensor):
         random_shear = aug_set_dict["random_shear"]
     #if random_shear is not None:
         # added: random_shear
-        shear_w = tf.random_uniform(shape=[],
+        shear_w = tf.random.uniform(shape=[],
                                     minval = random_shear[0],
                                     maxval = random_shear[1])
-        shear_h = tf.random_uniform(shape=[],
+        shear_h = tf.random.uniform(shape=[],
                                     minval = random_shear[2],
                                     maxval = random_shear[3])
         trafo_matrix = [1, shear_w, 0,
@@ -705,14 +715,14 @@ def add_data_augmentation(aug_set_dict, input_im_tensor):
             input_width = tf.shape(input_im_tensor)[1]
             resize_shape = tf.stack([input_height, input_width])
             resize_shape_as_int = tf.cast(resize_shape, dtype=tf.int32)
-            resized_image_tensor = tf.image.resize_images(tranformed_image,
+            resized_image_tensor = tf.image.resize(tranformed_image,
                                                           resize_shape_as_int)
             tranformed_image = resized_image_tensor
 
     if "gaussian_noise" in aug_set_dict.keys():
         gaussian_noise = aug_set_dict["gaussian_noise"]
     #if gaussian_noise is not None:
-        noise = tf.random_normal(shape=tf.shape(tranformed_image), mean=0.0, stddev=gaussian_noise, dtype=tf.float32)
+        noise = tf.random.normal(shape=tf.shape(tranformed_image), mean=0.0, stddev=gaussian_noise, dtype=tf.float32)
         tranformed_image = tf.clip_by_value(tranformed_image + noise, 0.0, 1.0)
 
     return tranformed_image
@@ -750,7 +760,7 @@ def add_jpeg_decoding(module_spec, crop_aspect_ratio=1):
     print('Input dimensions of the pre-trained network:\n',
           input_height, input_width, input_depth)
 
-    jpeg_data_tensor = tf.placeholder(tf.string, name='DecodeJPGInput')
+    jpeg_data_tensor = tf.compat.v1.placeholder(tf.string, name='DecodeJPGInput')
     decoded_image = tf.image.decode_jpeg(jpeg_data_tensor,
                                          channels=input_depth)
     decoded_image_as_float = tf.image.convert_image_dtype(decoded_image,
@@ -774,7 +784,7 @@ def add_jpeg_decoding(module_spec, crop_aspect_ratio=1):
     gauss_kernel = tf.tile(gauss_kernel_2d[:, :, tf.newaxis, tf.newaxis],
                            [1, 1, 3, 1])
     pointwise_filter = tf.eye(3, batch_shape=[1, 1])  # does nothing
-    bool_downsize = tf.placeholder(tf.bool)
+    bool_downsize = tf.compat.v1.placeholder(tf.bool)
     bool_downsize = tf.cond(input_height < tf.maximum(decoded_height, decoded_width),
                             lambda: True, lambda: False)
     decoded_image_4d = tf.cond(bool_downsize,
@@ -805,7 +815,7 @@ def add_jpeg_decoding(module_spec, crop_aspect_ratio=1):
 
     resize_shape = tf.stack([input_height, input_width])
     resize_shape_as_int = tf.cast(resize_shape, dtype=tf.int32)
-    resized_image_tensor = tf.image.resize_bilinear(decoded_image_4d,
+    resized_image_tensor = tf.compat.v1.image.resize_bilinear(decoded_image_4d,
                                                     resize_shape_as_int)
     resized_image_tensor = tf.squeeze(resized_image_tensor)
 

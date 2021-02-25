@@ -4,13 +4,15 @@ import pandas as pd
 import random
 from tqdm import tqdm
 import tensorflow as tf
-# import SILKNOW_WP4_library as wp4lib
 from . import SILKNOW_WP4_library as wp4lib
 
 
 class SampleHandler:
     """Class for handling the usage of samples."""
-    def __init__(self, masterfile_dir, masterfile_name, relevant_variables, validation_percentage, image_based_samples = None, sampleType = None):
+
+    def __init__(self, masterfile_dir, masterfile_name, relevant_variables, validation_percentage,
+                 image_based_samples=None, sampleType=None, multiLabelsListOfVariables=None,
+                 bool_unlabeled_dataset_rules = None, max_num_classes_per_variable_default=None):
         """Initializes an object of this class and loads all training and validation images into RAM.
 
             :Arguments:
@@ -38,16 +40,25 @@ class SampleHandler:
                   *image*: Image-based image samples. The same as image_based_samples==True
                   *record*: Record-based image samples. The same as image_based_samples==False
                   *mixed*: Record-based samples with text and image.
+
+              :multiLabelsListOfVariables (*list*)\::
+                    List of strings describing fields of variables in the rawCSV that contain multiple labels per
+                    variable. All variable names listed in multiLabelsListOfVariables will contain multiple labels per variable in
+                    addition to the single variables. Given the labels "label_1", "label_2" and "label_3" for one variable
+                    of one image, the resulting collection files will contain a label in the format
+                    "label_1___label_2___label_3". Such merged labels will be handeled in subsequent function of the image
+                    processing module to perform multi-label classification/semantic similarity.
                 """
         assert image_based_samples is not None or sampleType is not None, \
             "Either image_based_samples or sampleType has to be specified!"
 
-        assert sampleType is None or sampleType in ["image","record","mixed"], \
+        assert sampleType is None or sampleType in ["image", "record", "mixed"], \
             "sampleType has to be one of 'image','record','mixed'!"
 
         self.masterfile_dir = masterfile_dir
         self.masterfile_name = masterfile_name
         self.validation_percentage = validation_percentage
+        self.multiLabelsListOfVariables = multiLabelsListOfVariables
 
         if sampleType is None:
             self.sampleType = "image" if image_based_samples else "record"
@@ -63,15 +74,24 @@ class SampleHandler:
 
         # convert list of collections files into two dictionaries
         # 1) collections_dict_MTL: [variable][class label][images], no explicit 'nan'
-        # 2) image_2_label_dict[full_image_name][#label_1, ..., #label_N], with explicit 'nan'
+        # 2) image_2_label_dict[full_image_name][variable][class_label], with explicit 'nan'
         (collections_dict_MTL,
          image_2_label_dict) = wp4lib.collections_list_MTL_to_image_lists(
-            collections_list = collections_list,
-            labels_2_learn = relevant_variables,
-            master_dir = self.masterfile_dir)
+            collections_list=collections_list,
+            labels_2_learn=relevant_variables,
+            master_dir=self.masterfile_dir,
+            multiLabelsListOfVariables=self.multiLabelsListOfVariables,
+            bool_unlabeled_dataset=bool_unlabeled_dataset_rules)
 
-        self.classCountDict = self.getClassCountDictFromCollectionDict(collections_dict_MTL)
+        self.classCountDict = self.getClassCountDictFromCollectionDict(collections_dict_MTL,
+                                                                       bool_unlabeled_dataset_rules)
         self.taskDict = self.getTaskDictFromCollectionDict(collections_dict_MTL)
+
+        if not self.multiLabelsListOfVariables is None:
+            if bool_unlabeled_dataset_rules is None:
+                self.max_num_classes_per_variable = self.find_max_num_classes_per_variable()
+            else:
+                self.max_num_classes_per_variable = max_num_classes_per_variable_default
 
         (collections_dict_MTL_train,
          collections_dict_MTL_validation,
@@ -79,12 +99,31 @@ class SampleHandler:
          image_2_label_dict_validation
          ) = self.splitDataIntoTrainingAndValidation(collections_dict_MTL, image_2_label_dict, validation_percentage)
 
-        self.printNumberOfSamplesForEveryClass(collections_dict_MTL_train, collections_dict_MTL_validation)
+        if bool_unlabeled_dataset_rules is None:
+            self.printNumberOfSamplesForEveryClass(collections_dict_MTL_train, collections_dict_MTL_validation)
 
         self.initializeIndexLists(image_2_label_dict_train, image_2_label_dict_validation)
 
         self.load_image_data(collections_dict_MTL_train, image_2_label_dict_train,
-                        collections_dict_MTL_validation, image_2_label_dict_validation)
+                             collections_dict_MTL_validation, image_2_label_dict_validation)
+
+    def find_max_num_classes_per_variable(self):
+        max_num_classes_per_variable = 0
+        # print(self.taskDict)
+        for task in self.taskDict.keys():
+            class_names = []
+            for class_label in self.taskDict[task]:
+                if "___" in class_label:
+                    single_labels = class_label.split("___")
+                    for label in single_labels:
+                        if label not in class_names:
+                            class_names.append(label)
+                else:
+                    if class_label not in class_names:
+                        class_names.append(class_label)
+            max_num_classes_per_variable = max(max_num_classes_per_variable, len(class_names))
+            # print(task, max_num_classes_per_variable)
+        return max_num_classes_per_variable
 
     def initializeIndexLists(self, image_2_label_dict_train, image_2_label_dict_validation):
         # initialize index lists
@@ -100,9 +139,10 @@ class SampleHandler:
         random.shuffle(self.indexListValidation)
 
         print("Amount of images for training: %i \n"
-              "Amount of images for validation: %i \n" % (self.amountOfTrainingSamples, self.amountOfValidationSamples))
+              "\nAmount of images for validation: %i \n" % (
+                  self.amountOfTrainingSamples, self.amountOfValidationSamples))
 
-    def getClassCountDictFromCollectionDict(self, collections_dict_MTL):
+    def getClassCountDictFromCollectionDict(self, collections_dict_MTL, bool_unlabeled_dataset_rules):
         # also, check if there is enough data provided
         classCountDict = {}
         for im_label in collections_dict_MTL.keys():
@@ -111,10 +151,11 @@ class SampleHandler:
                 temp_class_count = len(collections_dict_MTL[im_label][clsLabel])
                 vardict[clsLabel] = temp_class_count
             classCountDict[im_label] = vardict
-            assert not len(classCountDict[im_label].keys()) == 0, \
-                'No valid collections of images found at '
-            assert not len(classCountDict[im_label].keys()) == 1, \
-                'Only one class was provided via ' + self.masterfile_name + ' - multiple classes are needed for classification.'
+            if bool_unlabeled_dataset_rules is None:
+                assert not len(classCountDict[im_label].keys()) == 0 , \
+                    'No valid collections of images found at '
+                assert not len(classCountDict[im_label].keys()) == 1, \
+                    'Only one class was provided via ' + self.masterfile_name + ' - multiple classes are needed for classification.'
         return classCountDict
 
     def getCollectionDataframeFromCollectionsList(self, collections_list):
@@ -174,24 +215,26 @@ class SampleHandler:
 
         if self.sampleType == "image":
             self.data_all['train'] = self.load_image_data_image_based(collections_dict_MTL=collections_dict_MTL_train,
-                                             image_2_label_dict=image_2_label_dict_train)
+                                                                      image_2_label_dict=image_2_label_dict_train)
 
-            self.data_all['valid'] = self.load_image_data_image_based(collections_dict_MTL=collections_dict_MTL_validation,
-                                             image_2_label_dict=image_2_label_dict_validation)
+            self.data_all['valid'] = self.load_image_data_image_based(
+                collections_dict_MTL=collections_dict_MTL_validation,
+                image_2_label_dict=image_2_label_dict_validation)
 
         elif self.sampleType == "record":
             self.data_all['train'] = self.load_image_data_record_based(collections_dict_MTL=collections_dict_MTL_train,
-                                             image_2_label_dict=image_2_label_dict_train)
+                                                                       image_2_label_dict=image_2_label_dict_train)
 
-            self.data_all['valid'] = self.load_image_data_record_based(collections_dict_MTL=collections_dict_MTL_validation,
-                                              image_2_label_dict=image_2_label_dict_validation)
+            self.data_all['valid'] = self.load_image_data_record_based(
+                collections_dict_MTL=collections_dict_MTL_validation,
+                image_2_label_dict=image_2_label_dict_validation)
 
         elif self.sampleType == "mixed":
             self.data_all['train'] = self.load_image_text_data(collections_dict_MTL=collections_dict_MTL_train,
-                                             image_2_label_dict=image_2_label_dict_train)
+                                                               image_2_label_dict=image_2_label_dict_train)
 
             self.data_all['valid'] = self.load_image_text_data(collections_dict_MTL=collections_dict_MTL_validation,
-                                              image_2_label_dict=image_2_label_dict_validation)
+                                                               image_2_label_dict=image_2_label_dict_validation)
 
     def load_image_data_image_based(self, collections_dict_MTL, image_2_label_dict):
         """Loads data for the image-based scenario.
@@ -223,9 +266,12 @@ class SampleHandler:
 
             # load raw JPEG data from image path
             image_full_path = os.path.abspath(os.path.join(self.masterfile_dir, image_name))
-            if not tf.gfile.Exists(image_full_path):
+            if not tf.io.gfile.exists(image_full_path):
                 tf.logging.fatal('File does not exist %s', image_full_path)
-            raw_image = tf.gfile.GFile(image_full_path, 'rb').read()
+            raw_image = tf.io.gfile.GFile(image_full_path, 'rb').read()
+
+            if not self.multiLabelsListOfVariables is None:
+                temp_ground_truth = self.convertGroundTruthToIndiceMatrix(temp_ground_truth)
 
             data_dict[image_name] = {'data': raw_image, 'labels': temp_ground_truth}
 
@@ -338,7 +384,11 @@ class SampleHandler:
         return all_images, ground_truths, names
 
     def get_random_samples_record_based(self, how_many, purpose, session,
-                           jpeg_data_tensor, decoded_image_tensor):
+                                        jpeg_data_tensor, decoded_image_tensor):
+        if not self.multiLabelsListOfVariables is None:
+            print("to be implemented")
+            sys.exit()
+
         all_images = []
         ground_truths = []
         object_names = []
@@ -369,11 +419,13 @@ class SampleHandler:
         return all_images, ground_truths, object_names
 
     def get_random_samples_image_based(self, how_many, purpose, session,
-                           jpeg_data_tensor, decoded_image_tensor):
+                                       jpeg_data_tensor, decoded_image_tensor):
+        # TODO: ground truth in case of mutli label
 
         all_images = []
         ground_truths = []
         filenames = []
+        all_image_index_train = []
 
         # Retrieve a random sample of raw JPEG data
         for unused_i in range(how_many):
@@ -381,23 +433,40 @@ class SampleHandler:
             image_index = None
             if purpose == 'train':
                 image_index = self.getTrainIndex()
+                if self.amountOfTrainingSamples > how_many:
+                    while image_index in all_image_index_train:
+                        image_index = self.getTrainIndex()
+                    all_image_index_train.append(image_index)
+                else:
+                    assert self.amountOfTrainingSamples > how_many, "select a smaller train batch size"
             if purpose == 'valid':
                 image_index = self.getValidIndex()
 
             image_name = list(self.data_all[purpose].keys())[image_index]
-            temp_ground_truth = self.data_all[purpose][image_name]['labels']
+            temp_ground_truth = self.data_all[purpose][image_name][
+                'labels']  # order of labels acc keys in self.taskDict
+            # if not self.multiLabelsListOfVariables is None:
+            #     temp_ground_truth = self.convertGroundTruthToIndiceMatrix(temp_ground_truth)
+                # print(temp_ground_truth)
+            # print(np.shape(temp_ground_truth))
             image_data = session.run(decoded_image_tensor,
                                      {jpeg_data_tensor: self.data_all[purpose][image_name]['data']})
-
             all_images.append(image_data)
             ground_truths.append(temp_ground_truth)
             filenames.append(image_name)
-
-        ground_truths = tuple(zip(*ground_truths))
+        # print(np.shape(ground_truths))
+        if self.multiLabelsListOfVariables is None:
+            ground_truths = tuple(zip(*ground_truths))
+        # print(np.shape(ground_truths))
         return all_images, ground_truths, filenames
 
     def get_random_samples_mixed(self, how_many, purpose, session,
-                           jpeg_data_tensor, decoded_image_tensor):
+                                 jpeg_data_tensor, decoded_image_tensor):
+
+        if not self.multiLabelsListOfVariables is None:
+            print("to be implemented")
+            sys.exit()
+
         all_images = []
         ground_truths = []
         all_text_descriptors = []
@@ -429,6 +498,33 @@ class SampleHandler:
         ground_truths = tuple(zip(*ground_truths))
         return all_images, ground_truths, all_text_descriptors
 
+    def convertGroundTruthToIndiceMatrix(self, temp_ground_truth):
+        converted_ground_truth = []
+        for task_ind, task in enumerate(self.taskDict.keys()):
+            if task in self.multiLabelsListOfVariables:
+                list_of_multilabel_ind = [ind for ind, name_str in enumerate(self.taskDict[task]) if "___" in name_str]
+                if temp_ground_truth[task_ind] in list_of_multilabel_ind:
+                    converted_label = np.zeros(self.max_num_classes_per_variable)
+                    for single_label in self.taskDict[task][temp_ground_truth[task_ind]].split("___"):
+                        temp_unconverted = list(self.taskDict[task]).index(single_label)
+                        temp_converted = self.get_one_hot_label(indice=temp_unconverted,
+                                                                depth=self.max_num_classes_per_variable)
+                        converted_label = converted_label + temp_converted
+                else:
+                    converted_label = self.get_one_hot_label(indice=temp_ground_truth[task_ind],
+                                                             depth=self.max_num_classes_per_variable)
+                converted_ground_truth.append(list(converted_label))
+            else:
+                converted_label = self.get_one_hot_label(indice=temp_ground_truth[task_ind],
+                                                         depth=self.max_num_classes_per_variable)
+                converted_ground_truth.append(converted_label)
+        return converted_ground_truth
+
+    def get_one_hot_label(self, indice, depth):
+        converted = list(np.zeros(depth))
+        if indice >= 0:
+            converted[indice] = 1
+        return converted
 
     def splitDataIntoTrainingAndValidation(self, collections_dict_MTL, image_2_label_dict, validation_percentage):
         """Splits the whole collection into two collections.
@@ -545,9 +641,9 @@ class SampleHandler:
               "** Number of samples for every class **\n"
               "***************************************\n")
         for MTL_task in collections_dict_MTL_train.keys():
-            print("%30s %5s %5s %5s" % ("***"+MTL_task.upper()+"***","Train", "Valid", "All"))
+            print("%30s %5s %5s %5s" % ("***" + MTL_task.upper() + "***", "Train", "Valid", "All"))
             for class_ in collections_dict_MTL_train[MTL_task]:
                 amountTrain = len(collections_dict_MTL_train[MTL_task][class_])
                 amountValid = len(collections_dict_MTL_val[MTL_task][class_])
-                print("%30s: %5i %5i %5i" % (class_, amountTrain, amountValid, amountTrain+amountValid))
+                print("%30s: %5i %5i %5i" % (class_, amountTrain, amountValid, amountTrain + amountValid))
             print("")

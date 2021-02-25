@@ -1,5 +1,6 @@
 import numpy as np
 import os
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}
 import tensorflow as tf
 import sys
@@ -10,18 +11,18 @@ import pandas as pd
 import urllib.request
 import math
 
-
 # sys.path.insert(0, '../')
 # import SILKNOW_WP4_library as wp4lib
 # from SampleHandler import SampleHandler
 # import LossCollections
+
+
 from . import SILKNOW_WP4_library as wp4lib
 from . import SampleHandler
 from . import LossCollections
 
 # import tensorflow.python.util.deprecation as deprecation
 # deprecation._PRINT_DEPRECATION_WARNINGS = False
-
 
 
 class ImportGraph:
@@ -101,6 +102,7 @@ class SilkClassifier:
         """Creates an empty object of class silk_classifier."""
         # record-based samples or image-based samples?
         self.image_based_samples = None
+        self.bool_unlabeled_dataset = None
 
         # Directories
         self.masterfile_name = None
@@ -136,6 +138,7 @@ class SilkClassifier:
         self.aug_set_dict = {}
 
     """MAIN FUNCTIONS"""
+
     def train_model(self):
         """Trains a new classifier.
 
@@ -177,7 +180,7 @@ class SilkClassifier:
                 lossFunction = LossCollections.getLossFunction(self.nameOfLossFunction,
                                                                self.lossParameters)
                 lossTensor = lossFunction(ground_truth_input, logits_MTL,
-                                    self.samplehandler.classCountDict)
+                                          self.samplehandler.classCountDict)
 
             with tf.name_scope("optimizer"):
                 train_step, \
@@ -185,6 +188,7 @@ class SilkClassifier:
 
         # Initialize Session
         with tf.Session(graph=graph) as sess:
+            tf.compat.v1.random.set_random_seed(42)
             # Initialize all weights: for the module to their pretrained values,
             # and for the newly added retraining layer to random initial values.
             init = tf.global_variables_initializer()
@@ -213,11 +217,11 @@ class SilkClassifier:
             best_validation_loss = -1
             for i in range(self.how_many_training_steps):
                 (image_data,
-                 train_ground_truth,_) = self.samplehandler.get_random_samples(how_many=self.batchsize,
-                                                                          purpose='train',
-                                                                          session=sess,
-                                                                          jpeg_data_tensor=jpeg_data_tensor,
-                                                                          decoded_image_tensor=decoded_image_tensor)
+                 train_ground_truth, _) = self.samplehandler.get_random_samples(how_many=self.batchsize,
+                                                                                purpose='train',
+                                                                                session=sess,
+                                                                                jpeg_data_tensor=jpeg_data_tensor,
+                                                                                decoded_image_tensor=decoded_image_tensor)
 
                 # Online Data Augmentation
                 vardata = [sess.run(augmented_image_tensor, feed_dict={decoded_image_tensor: imdata}) for imdata in
@@ -241,17 +245,18 @@ class SilkClassifier:
                 # Optional Validation
                 if self.validation_percentage > 0 and (i % self.how_often_validation == 0):
                     total_validation_loss = []
-                    maximumNumberOfValidationIterations = int(np.ceil(self.samplehandler.amountOfValidationSamples / self.batchsize))
+                    maximumNumberOfValidationIterations = int(
+                        np.ceil(self.samplehandler.amountOfValidationSamples / self.batchsize))
                     for val_iter in range(maximumNumberOfValidationIterations):
                         var_batch_size = min(self.batchsize,
                                              self.samplehandler.amountOfValidationSamples - self.samplehandler.nextUnusedValidationSampleIndex)
 
                         (val_image_data,
-                         val_ground_truth,_) = self.samplehandler.get_random_samples(how_many=var_batch_size,
-                                                                                purpose='valid',
-                                                                                session=sess,
-                                                                                jpeg_data_tensor=jpeg_data_tensor,
-                                                                                decoded_image_tensor=decoded_image_tensor)
+                         val_ground_truth, _) = self.samplehandler.get_random_samples(how_many=var_batch_size,
+                                                                                      purpose='valid',
+                                                                                      session=sess,
+                                                                                      jpeg_data_tensor=jpeg_data_tensor,
+                                                                                      decoded_image_tensor=decoded_image_tensor)
 
                         feed_dictionary = {input_image_tensor: val_image_data}
                         val_ground_truth_ = np.asarray(val_ground_truth)
@@ -307,9 +312,10 @@ class SilkClassifier:
         groundtruth = []
         try:
             coll_list = wp4lib.master_file_to_collections_list(self.masterfile_dir, self.masterfile_name)
-            coll_dict, data_dict = wp4lib.collections_list_MTL_to_image_lists(coll_list,
-                                                                              task_list,
-                                                                              self.masterfile_dir)
+            coll_dict, data_dict = wp4lib.collections_list_MTL_to_image_lists(collections_list = coll_list,
+                                                                              labels_2_learn = task_list,
+                                                                              master_dir = self.masterfile_dir,
+                                                                              bool_unlabeled_dataset = self.bool_unlabeled_dataset)
             for dd in data_dict.keys():
                 vardict = data_dict[dd]
                 varlist = [vardict[task] for task in task_list]
@@ -324,6 +330,7 @@ class SilkClassifier:
                     df = pd.read_csv(os.path.join(self.masterfile_dir, cFile), delimiter="\t")
                     collectionDataframe = collectionDataframe.append(df)
                 collectionDataframe = collectionDataframe.set_index("#obj")
+                print(len(collectionDataframe))
 
         # read list of custom images that where not exported from the KG
         # TODO: Prädiktion für Custom Images muss noch implementiert werden
@@ -342,6 +349,27 @@ class SilkClassifier:
             groundtruth = None
 
         # Prepare result files
+        if "place" in task_list:
+            sys_integration_pred_place = os.path.join(self.result_dir, "sys_integration_pred_place.csv")
+            integtration_file_place = open(os.path.abspath(sys_integration_pred_place), 'w')
+            integtration_file_place.write("obj_uri, museum, image_name, predicted_class, class_score\n")
+        if "timespan" in task_list:
+            sys_integration_pred_timespan = os.path.join(self.result_dir, "sys_integration_pred_timespan.csv")
+            integtration_file_timespan = open(os.path.abspath(sys_integration_pred_timespan), 'w')
+            integtration_file_timespan.write("obj_uri, museum, image_name, predicted_class, class_score\n")
+        if "technique" in task_list:
+            sys_integration_pred_technique = os.path.join(self.result_dir, "sys_integration_pred_technique.csv")
+            integtration_file_technique = open(os.path.abspath(sys_integration_pred_technique), 'w')
+            integtration_file_technique.write("obj_uri, museum, image_name, predicted_class, class_score\n")
+        if "material" in task_list:
+            sys_integration_pred_material = os.path.join(self.result_dir, "sys_integration_pred_material.csv")
+            integtration_file_material = open(os.path.abspath(sys_integration_pred_material), 'w')
+            integtration_file_material.write("obj_uri, museum, image_name, predicted_class, class_score\n")
+        if "depiction" in task_list:
+            sys_integration_pred_depiction = os.path.join(self.result_dir, "sys_integration_pred_depiction.csv")
+            integtration_file_depiction = open(os.path.abspath(sys_integration_pred_depiction), 'w')
+            integtration_file_depiction.write("obj_uri, museum, image_name, predicted_class, class_score\n")
+
         classification_result = self.result_dir + r"/classification_results.txt"
         classification_scores = self.result_dir + r"/classification_scores.txt"
         class_res_id = open(os.path.abspath(classification_result), 'w')
@@ -356,7 +384,7 @@ class SilkClassifier:
         # when image_based_samples is True, image_file_array lists individual image files
         # when image_based_samples is False, image_file_array lists object URIs
         # in this case, the URIs have to be dereferenced into image files
-
+        print(len(image_file_array))
         for image_file in tqdm(image_file_array, total=len(image_file_array)):
             if self.image_based_samples:
                 im_file_full_path = os.path.abspath(os.path.join(self.masterfile_dir,
@@ -402,8 +430,49 @@ class SilkClassifier:
             class_score_file.write("****" + image_file + "****" + "\n")
             for ti, task in enumerate(task_dict):
                 class_score_file.write(task + ": \t \t")
+                max_score = 0
+                pred_class = None
                 for ci, c in enumerate(task_dict[task]):
                     class_score_file.write(c + ": " + str(np.around(results[ti][0][ci] * 100, 2)) + "% \t \t")
+                    if np.around(results[ti][0][ci] * 100, 2) > max_score:
+                        max_score = np.around(results[ti][0][ci] * 100, 2)
+                        pred_class = c
+
+                if task == "place":
+                    integtration_file_place.write(
+                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+                    integtration_file_place.write(os.path.basename(image_file).split("__")[0] + ", ")
+                    integtration_file_place.write(os.path.basename(image_file).split("__")[2] + ", ")
+                    integtration_file_place.write(pred_class + ", ")
+                    integtration_file_place.write(str(max_score) + "%\n")
+                if task == "timespan":
+                    integtration_file_timespan.write(
+                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+                    integtration_file_timespan.write(os.path.basename(image_file).split("__")[0] + ", ")
+                    integtration_file_timespan.write(os.path.basename(image_file).split("__")[2] + ", ")
+                    integtration_file_timespan.write(pred_class + ", ")
+                    integtration_file_timespan.write(str(max_score) + "%\n")
+                if task == "technique":
+                    integtration_file_technique.write(
+                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+                    integtration_file_technique.write(os.path.basename(image_file).split("__")[0] + ", ")
+                    integtration_file_technique.write(os.path.basename(image_file).split("__")[2] + ", ")
+                    integtration_file_technique.write(pred_class + ", ")
+                    integtration_file_technique.write(str(max_score) + "%\n")
+                if task == "material":
+                    integtration_file_material.write(
+                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+                    integtration_file_material.write(os.path.basename(image_file).split("__")[0] + ", ")
+                    integtration_file_material.write(os.path.basename(image_file).split("__")[2] + ", ")
+                    integtration_file_material.write(pred_class + ", ")
+                    integtration_file_material.write(str(max_score) + "%\n")
+                if task == "depiction":
+                    integtration_file_depiction.write(
+                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+                    integtration_file_depiction.write(os.path.basename(image_file).split("__")[0] + ", ")
+                    integtration_file_depiction.write(os.path.basename(image_file).split("__")[2] + ", ")
+                    integtration_file_depiction.write(pred_class + ", ")
+                    integtration_file_depiction.write(str(max_score) + "%\n")
 
                 class_score_file.write("\n")
             class_score_file.write("\n")
@@ -413,6 +482,16 @@ class SilkClassifier:
 
         class_res_id.close()
         class_score_file.close()
+        if "place" in task_list:
+            integtration_file_place.close()
+        if "timespan" in task_list:
+            integtration_file_timespan.close()
+        if "technique" in task_list:
+            integtration_file_technique.close()
+        if "material" in task_list:
+            integtration_file_material.close()
+        if "depiction" in task_list:
+            integtration_file_depiction.close()
 
         # Save Prediction and Groundtruth as .npy for evaluation
         pred_gt = {"Groundtruth": np.asarray(groundtruth),
@@ -494,8 +573,8 @@ class SilkClassifier:
                 tempExperimentName = str(self.log_dir_cv).split("/")[-2]
             else:
                 tempExperimentName = str(self.log_dir_cv).split("/")[-1]
-            temporaryTrainMasterfileName = "Masterfile_train_"+tempExperimentName+".txt"
-            temporaryTestMasterfileName = "Masterfile_test_"+tempExperimentName+".txt"
+            temporaryTrainMasterfileName = "Masterfile_train_" + tempExperimentName + ".txt"
+            temporaryTestMasterfileName = "Masterfile_test_" + tempExperimentName + ".txt"
             train_master = open(os.path.abspath(self.masterfile_dir + '/' + temporaryTrainMasterfileName), 'w')
             test_master = open(os.path.abspath(self.masterfile_dir + '/' + temporaryTestMasterfileName), 'w')
             train_coll = np.roll(coll_list, cviter)[:-1]
@@ -593,10 +672,10 @@ class SilkClassifier:
                                            validation_percentage=self.validation_percentage)
 
         self.samplehandlerTarget = SampleHandler(masterfile_dir=self.masterfile_dir,
-                                           masterfile_name=self.masterfileTarget,
-                                           relevant_variables=self.relevant_variables,
-                                           image_based_samples=self.image_based_samples,
-                                           validation_percentage=100.)
+                                                 masterfile_name=self.masterfileTarget,
+                                                 relevant_variables=self.relevant_variables,
+                                                 image_based_samples=self.image_based_samples,
+                                                 validation_percentage=100.)
 
         # Setup graph
         module_spec = hub.load_module_spec(str(self.tfhub_module))
@@ -650,11 +729,11 @@ class SilkClassifier:
             best_validation_loss = -1
             for i in range(self.how_many_training_steps):
                 (image_data,
-                 train_ground_truth,_) = self.samplehandler.get_random_samples(how_many=self.batchsize,
-                                                                          purpose='train',
-                                                                          session=sess,
-                                                                          jpeg_data_tensor=jpeg_data_tensor,
-                                                                          decoded_image_tensor=decoded_image_tensor)
+                 train_ground_truth, _) = self.samplehandler.get_random_samples(how_many=self.batchsize,
+                                                                                purpose='train',
+                                                                                session=sess,
+                                                                                jpeg_data_tensor=jpeg_data_tensor,
+                                                                                decoded_image_tensor=decoded_image_tensor)
 
                 # Online Data Augmentation
                 vardata = [sess.run(augmented_image_tensor, feed_dict={decoded_image_tensor: imdata}) for imdata in
@@ -678,17 +757,18 @@ class SilkClassifier:
                 # Optional Validation
                 if self.validation_percentage > 0 and (i % self.how_often_validation == 0):
                     total_validation_loss = []
-                    maximumNumberOfValidationIterations = int(np.ceil(self.samplehandler.amountOfValidationSamples / self.batchsize))
+                    maximumNumberOfValidationIterations = int(
+                        np.ceil(self.samplehandler.amountOfValidationSamples / self.batchsize))
                     for val_iter in range(maximumNumberOfValidationIterations):
                         var_batch_size = min(self.batchsize,
                                              self.samplehandler.amountOfValidationSamples - self.samplehandler.nextUnusedValidationSampleIndex)
 
                         (val_image_data,
-                         val_ground_truth,_) = self.samplehandler.get_random_samples(how_many=var_batch_size,
-                                                                                purpose='valid',
-                                                                                session=sess,
-                                                                                jpeg_data_tensor=jpeg_data_tensor,
-                                                                                decoded_image_tensor=decoded_image_tensor)
+                         val_ground_truth, _) = self.samplehandler.get_random_samples(how_many=var_batch_size,
+                                                                                      purpose='valid',
+                                                                                      session=sess,
+                                                                                      jpeg_data_tensor=jpeg_data_tensor,
+                                                                                      decoded_image_tensor=decoded_image_tensor)
 
                         feed_dictionary = {input_image_tensor: val_image_data}
                         val_ground_truth_ = np.asarray(val_ground_truth)
@@ -729,10 +809,10 @@ class SilkClassifier:
 
                         (val_image_data,
                          val_ground_truth, _) = self.samplehandlerTarget.get_random_samples(how_many=var_batch_size,
-                                                                                      purpose='valid',
-                                                                                      session=sess,
-                                                                                      jpeg_data_tensor=jpeg_data_tensor,
-                                                                                      decoded_image_tensor=decoded_image_tensor)
+                                                                                            purpose='valid',
+                                                                                            session=sess,
+                                                                                            jpeg_data_tensor=jpeg_data_tensor,
+                                                                                            decoded_image_tensor=decoded_image_tensor)
 
                         feed_dictionary = {input_image_tensor: val_image_data}
                         val_ground_truth_ = np.asarray(val_ground_truth)
@@ -819,8 +899,10 @@ class SilkClassifier:
             # 2.2 Create one classification network per classification task
 
             with tf.variable_scope("joint_layers_MTL"):
-                dropout_rate_input_tensor = tf.placeholder_with_default(tf.constant(0.), shape=[], name="dropout_rate_input")
-                bottleneck_tensor = tf.nn.dropout(bottleneck_tensor, rate=dropout_rate_input_tensor, name="dropout_layer")
+                dropout_rate_input_tensor = tf.placeholder_with_default(tf.constant(0.), shape=[],
+                                                                        name="dropout_rate_input")
+                bottleneck_tensor = tf.nn.dropout(bottleneck_tensor, rate=dropout_rate_input_tensor,
+                                                  name="dropout_layer")
 
                 joint_fc = tf.layers.dense(inputs=bottleneck_tensor,
                                            units=self.num_nodes_joint_fc,
@@ -842,7 +924,8 @@ class SilkClassifier:
             # Count missing tasks for every sample, i.e. to which degree one sample is incomplete
             assert self.num_task_stop_gradient <= len(self.samplehandler.classCountDict.keys()), \
                 "num_task_stop_gradient has to be smaller or equal to the number of tasks!"
-            if self.num_task_stop_gradient < 0: self.num_task_stop_gradient = len(self.samplehandler.classCountDict.keys())
+            if self.num_task_stop_gradient < 0: self.num_task_stop_gradient = len(
+                self.samplehandler.classCountDict.keys())
             count_incomplete = tf.fill(tf.shape(ground_truth_MTL[0]), 0.0)
             for MTL_ind, MTL_task in enumerate(self.samplehandler.classCountDict.keys()):
                 temp_labels = ground_truth_MTL[MTL_ind]
@@ -901,7 +984,7 @@ class SilkClassifier:
         with tf.name_scope("gradient-reversal"):
             forwardPath = tf.stop_gradient(inputTensor * tf.cast(2., tf.float32))
             backwardPath = -inputTensor * tf.cast(1., tf.float32)
-        return forwardPath+backwardPath
+        return forwardPath + backwardPath
 
     # TODO: Optimierer um self.trainable_variables erweitern?
     def addOptimizer(self, loss):
@@ -972,6 +1055,7 @@ class SilkClassifier:
         return image_array
 
     """READ CONFIGFILES"""
+
     def read_configfile(self, configfile):
         """Reads all types of configfiles and sets internal parameters"""
 
@@ -998,7 +1082,6 @@ class SilkClassifier:
 
             if variable.split(';')[0] == 'num_labeled':
                 self.num_labeled = np.int(variable.split(';')[1].strip())
-
 
             # format of samples
             if variable.split(';')[0] == 'image_based_samples':
@@ -1072,7 +1155,6 @@ class SilkClassifier:
 
             if variable.split(';')[0] == 'nameOfLossFunction':
                 self.nameOfLossFunction = str(variable.split(';')[1].strip()).lower()
-
 
             # Augmentation
             if variable.split(';')[0] == 'flip_left_right':

@@ -175,7 +175,8 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir,
 #     sc.train_model()
 
 
-def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result_dir, image_based_samples=True):
+def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result_dir, bool_unlabeled_dataset = None,
+                              image_based_samples=True):
     """Classifies images.
 
     :Arguments\::
@@ -204,6 +205,7 @@ def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result
     sc.masterfile_dir = masterfile_dir
     sc.model_dir = model_dir
     sc.result_dir = result_dir
+    sc.bool_unlabeled_dataset = bool_unlabeled_dataset
 
     sc.image_based_samples = image_based_samples
 
