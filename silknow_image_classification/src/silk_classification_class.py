@@ -49,17 +49,17 @@ class ImportGraph:
         """
         # Create local graph and use it in the session
         self.graph = tf.Graph()
-        self.sess = tf.Session(graph=self.graph)
+        self.sess = tf.compat.v1.Session(graph=self.graph)
         with self.graph.as_default():
             # Import saved model from location 'loc' into local graph
-            saver = tf.train.import_meta_graph(loc + 'model.ckpt' + '.meta',
-                                               clear_devices=True)
+            saver = tf.compat.v1.train.import_meta_graph(loc + 'model.ckpt' + '.meta',
+                                                         clear_devices=True)
             """EXPERIMENTELL"""
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             self.sess.run(init)
             #            self.sess.run(tf.local_variables_initializer())
             """EXPERIMENTELL"""
-            saver.restore(self.sess, loc + 'model.ckpt')
+            saver.restore(self.sess, os.path.join(loc, 'model.ckpt'))
             self.task_list = task_list
             self.output_operations = [
                 self.graph.get_operation_by_name('customLayers/' + output_name + '_' + task).outputs[0] for task in
@@ -89,8 +89,28 @@ class ImportGraph:
         decoded_img = np.expand_dims(np.asarray(decoded_img), 0)
 
         feed_dict_decoded = {"moduleLayers/input_img:0": decoded_img}
+
+        input_tensors = []
         for task in self.task_list:
-            feed_dict_decoded['customLayers/input/GroundTruthInput' + task + ":0"] = [0.]
+            try:  # multi-class
+                tensorname = self.graph.get_tensor_by_name('customLayers/input/GroundTruthInput' + task + ":0")
+                feed_dict_decoded['customLayers/input/GroundTruthInput' + task + ":0"] = [0.]
+            except:  # mixed multi-class and multi-label
+                try:  # multi-class (softmax)
+                    tensorname = self.graph.get_tensor_by_name(
+                        'customLayers/input/GroundTruthInputMultiClass' + task + ":0")
+                    feed_dict_decoded['customLayers/input/GroundTruthInputMultiClass' + task + ":0"] = [[0.] *
+                                                                                                        tensorname.shape[
+                                                                                                            -1]]
+                except:  # mutli-label (sigmoid)
+                    tensorname = self.graph.get_tensor_by_name(
+                        'customLayers/input/GroundTruthInputMultiLabel' + task + ":0")
+                    feed_dict_decoded['customLayers/input/GroundTruthInputMultiLabel' + task + ":0"] = [[0.] *
+                                                                                                        tensorname.shape[
+                                                                                                            -1]]
+            input_tensors.append(tensorname)
+        self.input_tensors = input_tensors
+
         output = self.sess.run(self.output_operations, feed_dict=feed_dict_decoded)
         return output
 
@@ -133,6 +153,9 @@ class SilkClassifier:
         self.dropout_rate = None
         self.nameOfLossFunction = None
         self.lossParameters = None
+        self.multiLabelsListOfVariables = None
+
+        self.sigmoid_activation_thresh = 0.5
 
         # Augmentation
         self.aug_set_dict = {}
@@ -153,17 +176,24 @@ class SilkClassifier:
 
         # Assertions and Paths
         assert 0 <= self.validation_percentage <= 100, "Validation Percentage has to be between 0 and 100!"
+        if (self.multiLabelsListOfVariables is None and self.nameOfLossFunction == "mixed_sce") \
+                or (not self.multiLabelsListOfVariables is None and self.nameOfLossFunction != "mixed_sce"):
+            print("Either pass multi-label variables or set the loss to mixed_sce.")
+            sys.exit(-1)
 
         if not os.path.exists(os.path.join(self.log_dir, r"")): os.makedirs(os.path.join(self.log_dir, r""))
 
         self._write_train_parameters_to_configuration_file()
 
         # Initialize the SampleHandler
+        boolMultiLabelClassification = isinstance(self.multiLabelsListOfVariables, list)
         self.samplehandler = SampleHandler(masterfile_dir=self.masterfile_dir,
                                            masterfile_name=self.masterfile_name,
                                            relevant_variables=self.relevant_variables,
                                            image_based_samples=self.image_based_samples,
-                                           validation_percentage=self.validation_percentage)
+                                           validation_percentage=self.validation_percentage,
+                                           multiLabelsListOfVariables=self.multiLabelsListOfVariables,
+                                           boolMultiLabelClassification=boolMultiLabelClassification)
 
         # Setup graph
         module_spec = hub.load_module_spec(str(self.tfhub_module))
@@ -179,8 +209,18 @@ class SilkClassifier:
             with tf.name_scope("loss-function"):
                 lossFunction = LossCollections.getLossFunction(self.nameOfLossFunction,
                                                                self.lossParameters)
-                lossTensor = lossFunction(ground_truth_input, logits_MTL,
-                                          self.samplehandler.classCountDict)
+                if boolMultiLabelClassification:
+                    boolSigmoidActivation = {}
+                    for task in self.samplehandler.taskDict.keys():
+                        if task in self.multiLabelsListOfVariables:
+                            boolSigmoidActivation[task] = True
+                        else:
+                            boolSigmoidActivation[task] = False
+                    lossTensor = lossFunction(ground_truth_input, logits_MTL,
+                                              boolSigmoidActivation)
+                else:
+                    lossTensor = lossFunction(ground_truth_input, logits_MTL,
+                                              self.samplehandler.classCountDict)
 
             with tf.name_scope("optimizer"):
                 train_step, \
@@ -188,7 +228,6 @@ class SilkClassifier:
 
         # Initialize Session
         with tf.Session(graph=graph) as sess:
-            tf.compat.v1.random.set_random_seed(42)
             # Initialize all weights: for the module to their pretrained values,
             # and for the newly added retraining layer to random initial values.
             init = tf.global_variables_initializer()
@@ -201,27 +240,29 @@ class SilkClassifier:
                 augmented_image_tensor = wp4lib.add_data_augmentation(self.aug_set_dict, decoded_image_tensor)
 
             # Merge all the summaries and write them out to the logpath
-            merged = tf.summary.merge_all()
-            train_writer = tf.summary.FileWriter(self.log_dir + '/train', sess.graph)
+            merged = tf.compat.v1.summary.merge_all()
+            train_writer = tf.compat.v1.summary.FileWriter(self.log_dir + '/train', sess.graph)
 
             # Create a train saver that is used to restore values into an eval graph
             # when exporting models.
-            train_saver = tf.train.Saver()
+            train_saver = tf.compat.v1.train.Saver()
 
             # after all bottlenecks are cached, the collections_dict_train will
             # be renamed to collections_dict, if a validation is desired
             if self.validation_percentage > 0:
-                val_writer = tf.summary.FileWriter(self.log_dir + '/val', sess.graph)
+                val_writer = tf.compat.v1.summary.FileWriter(self.log_dir + '/val', sess.graph)
 
             # Start training iterations
             best_validation_loss = -1
             for i in range(self.how_many_training_steps):
                 (image_data,
-                 train_ground_truth, _) = self.samplehandler.get_random_samples(how_many=self.batchsize,
-                                                                                purpose='train',
-                                                                                session=sess,
-                                                                                jpeg_data_tensor=jpeg_data_tensor,
-                                                                                decoded_image_tensor=decoded_image_tensor)
+                 train_ground_truth, train_image_name) = self.samplehandler.get_random_samples(how_many=self.batchsize,
+                                                                                               purpose='train',
+                                                                                               session=sess,
+                                                                                               jpeg_data_tensor=jpeg_data_tensor,
+                                                                                               decoded_image_tensor=decoded_image_tensor)
+
+                # print(train_ground_truth)
 
                 # Online Data Augmentation
                 vardata = [sess.run(augmented_image_tensor, feed_dict={decoded_image_tensor: imdata}) for imdata in
@@ -248,8 +289,9 @@ class SilkClassifier:
                     maximumNumberOfValidationIterations = int(
                         np.ceil(self.samplehandler.amountOfValidationSamples / self.batchsize))
                     for val_iter in range(maximumNumberOfValidationIterations):
-                        var_batch_size = min(self.batchsize,
-                                             self.samplehandler.amountOfValidationSamples - self.samplehandler.nextUnusedValidationSampleIndex)
+                        # var_batch_size = min(self.batchsize,
+                        #                      self.samplehandler.amountOfValidationSamples - self.samplehandler.nextUnusedValidationSampleIndex)
+                        var_batch_size = self.batchsize
 
                         (val_image_data,
                          val_ground_truth, _) = self.samplehandler.get_random_samples(how_many=var_batch_size,
@@ -259,7 +301,13 @@ class SilkClassifier:
                                                                                       decoded_image_tensor=decoded_image_tensor)
 
                         feed_dictionary = {input_image_tensor: val_image_data}
-                        val_ground_truth_ = np.asarray(val_ground_truth)
+                        if self.multiLabelsListOfVariables is None:
+                            val_ground_truth_ = np.asarray(val_ground_truth)
+                        else:
+                            val_ground_truth_ = list(val_ground_truth)
+                        # print(val_ground_truth_)
+                        # sys.exit()
+                        # val_ground_truth_ = val_ground_truth
 
                         if (len(feed_dictionary[input_image_tensor])) == 0: break
                         for ind in range(np.shape(val_ground_truth_)[0]):
@@ -268,6 +316,7 @@ class SilkClassifier:
                         (validation_summary, validation_loss) = sess.run([merged, cross_entropy],
                                                                          feed_dict=feed_dictionary)
                         total_validation_loss.append(validation_loss)
+                        # print(val_iter, maximumNumberOfValidationIterations, validation_loss)
                         # print("It took %2.2f seconds to process a validation batch" % ((dt.datetime.now() - t1).seconds + (dt.datetime.now() - t1).microseconds/1e6))
 
                     total_validation_loss = np.mean(total_validation_loss)
@@ -283,11 +332,14 @@ class SilkClassifier:
                         print("New best model found!")
                         train_saver.save(sess, self.log_dir + '/' + 'model.ckpt')
                         best_validation_loss = total_validation_loss
-                else:
-                    train_saver.save(sess, self.log_dir + '/' + 'model.ckpt')
+                # else:
+                #     train_saver.save(sess, self.log_dir + '/' + 'model.ckpt')
 
+            # Save the last model in case of no validation
+            if self.validation_percentage == 0:
+                train_saver.save(sess, self.log_dir + '/' + 'model.ckpt')
         # Save task_dict for subsequent functions
-        np.savez(self.log_dir + r"/task_dict.npz", self.samplehandler.taskDict)
+        np.savez(self.log_dir + r"/task_dict.npz", self.samplehandler.classPerTaskDict)
 
     def classify_images(self):
         """Uses a trained classifier for prediction.
@@ -312,10 +364,13 @@ class SilkClassifier:
         groundtruth = []
         try:
             coll_list = wp4lib.master_file_to_collections_list(self.masterfile_dir, self.masterfile_name)
-            coll_dict, data_dict = wp4lib.collections_list_MTL_to_image_lists(collections_list = coll_list,
-                                                                              labels_2_learn = task_list,
-                                                                              master_dir = self.masterfile_dir,
-                                                                              bool_unlabeled_dataset = self.bool_unlabeled_dataset)
+            coll_dict, data_dict = wp4lib.collections_list_MTL_to_image_lists(
+                collections_list=coll_list,
+                labels_2_learn=task_list,
+                master_dir=self.masterfile_dir,
+                multiLabelsListOfVariables=self.multiLabelsListOfVariables,
+                bool_unlabeled_dataset=self.bool_unlabeled_dataset)
+
             for dd in data_dict.keys():
                 vardict = data_dict[dd]
                 varlist = [vardict[task] for task in task_list]
@@ -330,7 +385,6 @@ class SilkClassifier:
                     df = pd.read_csv(os.path.join(self.masterfile_dir, cFile), delimiter="\t")
                     collectionDataframe = collectionDataframe.append(df)
                 collectionDataframe = collectionDataframe.set_index("#obj")
-                print(len(collectionDataframe))
 
         # read list of custom images that where not exported from the KG
         # TODO: Prädiktion für Custom Images muss noch implementiert werden
@@ -384,12 +438,11 @@ class SilkClassifier:
         # when image_based_samples is True, image_file_array lists individual image files
         # when image_based_samples is False, image_file_array lists object URIs
         # in this case, the URIs have to be dereferenced into image files
-        print(len(image_file_array))
         for image_file in tqdm(image_file_array, total=len(image_file_array)):
             if self.image_based_samples:
                 im_file_full_path = os.path.abspath(os.path.join(self.masterfile_dir,
                                                                  image_file))
-                image_data = tf.gfile.GFile(im_file_full_path, 'rb').read()
+                image_data = tf.io.gfile.GFile(im_file_full_path, 'rb').read()
                 results = model.run(image_data)
 
             else:
@@ -403,22 +456,36 @@ class SilkClassifier:
                     image_data = tf.gfile.GFile(image_full_path, 'rb').read()
 
                     results = model.run(image_data)
+
                     results_for_objects_images.append(results)
 
                 # average results from all objects images
                 results = np.mean(results_for_objects_images, axis=0)
 
-            # Get most probable result per task
-            resultTasks = {}
-            for i, task in enumerate(task_list):
-                resultTasks[task] = np.argmax(results[i])
-            # Read actual class names and map results to those names
+            # Get most probable class(es) per task
             resultClasses = {}
             resultClasses_list = []
-            for task in task_dict:
+            for i, task in enumerate(task_list):
                 class_list = task_dict[task]
-                resultClasses[task] = class_list[resultTasks[task]]
-                resultClasses_list.append(class_list[resultTasks[task]])
+                if self.multiLabelsListOfVariables is None:  # only multi-class classifications (softmax)
+                    resultClasses[task] = class_list[np.argmax(results[i])]
+                    resultClasses_list.append(class_list[np.argmax(results[i])])
+                else:  # mixed multi-class (softmax) and mutli-label (sigmoid)
+                    if task in self.multiLabelsListOfVariables:  # sigmoid case
+                        multi_pred = np.where(results[i][0] > self.sigmoid_activation_thresh)[0]
+                        if len(multi_pred) > 0:  # at least one label predicted
+                            class_name = ""
+                            for pred in multi_pred:
+                                class_name = class_name + class_list[pred] + "___"
+                            class_name = class_name[0:-3]
+                            resultClasses[task] = class_name
+                            resultClasses_list.append(class_name)
+                        else:  # no label predicted; sigmoid <= self.sigmoid_activation_thresh for all classes
+                            resultClasses[task] = "nan_OR_" + class_list[np.argmax(results[i])]
+                            resultClasses_list.append("nan_OR_" + class_list[np.argmax(results[i])])
+                    else:  # softmax case
+                        resultClasses[task] = class_list[np.argmax(results[i])]
+                        resultClasses_list.append(class_list[np.argmax(results[i])])
 
             # Write class names to file
             class_res_id.write("%s" % image_file)
@@ -429,50 +496,43 @@ class SilkClassifier:
             # OUTPUT OF CLASS SCORES
             class_score_file.write("****" + image_file + "****" + "\n")
             for ti, task in enumerate(task_dict):
-                class_score_file.write(task + ": \t \t")
-                max_score = 0
-                pred_class = None
+                if self.multiLabelsListOfVariables is None:
+                    activation = " (softmax)"
+                else:
+                    if task in self.multiLabelsListOfVariables:
+                        activation = " (sigmoid)"
+                    else:
+                        activation = " (softmax)"
+                class_score_file.write(task + activation + ": \t \t")
                 for ci, c in enumerate(task_dict[task]):
                     class_score_file.write(c + ": " + str(np.around(results[ti][0][ci] * 100, 2)) + "% \t \t")
-                    if np.around(results[ti][0][ci] * 100, 2) > max_score:
-                        max_score = np.around(results[ti][0][ci] * 100, 2)
-                        pred_class = c
+
+                if len(resultClasses[task].split("___")) > 1:
+                    pred_class = resultClasses[task]
+                    max_score = ""
+                    for multi_class in pred_class.split("___"):
+                        score = results[ti][0][list(task_dict[task]).index(multi_class)] * 100
+                        max_score = max_score + str(np.around(score, 2)) + "___"
+                    max_score = max_score[0:-3]
+                else:
+                    pred_class = resultClasses[task]
+                    if "nan" in pred_class:
+                        score = 1. - max(results[ti][0])
+                        max_score = str(np.around(score, 2)) + "_OR_" + str(np.around(1. - score, 2))
+                    else:
+                        score = results[ti][0][list(task_dict[task]).index(resultClasses[task])] * 100
+                        max_score = str(np.around(score, 2))
 
                 if task == "place":
-                    integtration_file_place.write(
-                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
-                    integtration_file_place.write(os.path.basename(image_file).split("__")[0] + ", ")
-                    integtration_file_place.write(os.path.basename(image_file).split("__")[2] + ", ")
-                    integtration_file_place.write(pred_class + ", ")
-                    integtration_file_place.write(str(max_score) + "%\n")
+                    self.update_integration_file(image_file, integtration_file_place, max_score, pred_class)
                 if task == "timespan":
-                    integtration_file_timespan.write(
-                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
-                    integtration_file_timespan.write(os.path.basename(image_file).split("__")[0] + ", ")
-                    integtration_file_timespan.write(os.path.basename(image_file).split("__")[2] + ", ")
-                    integtration_file_timespan.write(pred_class + ", ")
-                    integtration_file_timespan.write(str(max_score) + "%\n")
+                    self.update_integration_file(image_file, integtration_file_timespan, max_score, pred_class)
                 if task == "technique":
-                    integtration_file_technique.write(
-                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
-                    integtration_file_technique.write(os.path.basename(image_file).split("__")[0] + ", ")
-                    integtration_file_technique.write(os.path.basename(image_file).split("__")[2] + ", ")
-                    integtration_file_technique.write(pred_class + ", ")
-                    integtration_file_technique.write(str(max_score) + "%\n")
+                    self.update_integration_file(image_file, integtration_file_technique, max_score, pred_class)
                 if task == "material":
-                    integtration_file_material.write(
-                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
-                    integtration_file_material.write(os.path.basename(image_file).split("__")[0] + ", ")
-                    integtration_file_material.write(os.path.basename(image_file).split("__")[2] + ", ")
-                    integtration_file_material.write(pred_class + ", ")
-                    integtration_file_material.write(str(max_score) + "%\n")
+                    self.update_integration_file(image_file, integtration_file_material, max_score, pred_class)
                 if task == "depiction":
-                    integtration_file_depiction.write(
-                        "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
-                    integtration_file_depiction.write(os.path.basename(image_file).split("__")[0] + ", ")
-                    integtration_file_depiction.write(os.path.basename(image_file).split("__")[2] + ", ")
-                    integtration_file_depiction.write(pred_class + ", ")
-                    integtration_file_depiction.write(str(max_score) + "%\n")
+                    self.update_integration_file(image_file, integtration_file_depiction, max_score, pred_class)
 
                 class_score_file.write("\n")
             class_score_file.write("\n")
@@ -498,6 +558,14 @@ class SilkClassifier:
                    "Predictions": np.asarray(predictions),
                    "task_dict": task_dict}
         np.savez(self.result_dir + r"/pred_gt.npz", pred_gt)
+
+    def update_integration_file(self, image_file, integtration_file, max_score, pred_class):
+        integtration_file.write(
+            "http://data.silknow.org/object/" + os.path.basename(image_file).split("__")[1] + ", ")
+        integtration_file.write(os.path.basename(image_file).split("__")[0] + ", ")
+        integtration_file.write(os.path.basename(image_file).split("__")[2] + ", ")
+        integtration_file.write(pred_class + ", ")
+        integtration_file.write(str(max_score) + "%\n")
 
     def evaluate_model(self):
         r""" Evaluates a pre-trained model.
@@ -541,13 +609,92 @@ class SilkClassifier:
             gtvar = gtvar[nan_mask]
             prvar = prvar[nan_mask]
 
-            ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
-            prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
-            wp4lib.estimate_quality_measures(ground_truth=ground_truth,
-                                             prediction=prediction,
-                                             list_class_names=list(list_class_names),
-                                             prefix_plot=taskname,
-                                             res_folder_name=self.result_dir)
+            # prepare predictions and groundtruth according to multi-class and multi-label classification
+            if self.multiLabelsListOfVariables is None:
+                ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
+                prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+                wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                 prediction=prediction,
+                                                 list_class_names=list(list_class_names),
+                                                 prefix_plot=taskname,
+                                                 res_folder_name=self.result_dir)
+            else:
+                if taskname in self.multiLabelsListOfVariables:
+                    gt_binary_no_nan = []
+                    pr_binary_no_nan = []
+                    gt_binary_all = []
+                    pr_binary_all = []
+                    for gt, pr in zip(gtvar, prvar):
+                        if "nan_OR_" in pr:
+                            gt_binary = [1 if temp_class in gt.split("___") else 0 for temp_class in list_class_names]
+                            pr_binary = [1 if temp_class == pr.replace("nan_OR_", "") else 0 for temp_class in
+                                         list_class_names]
+                            gt_binary_all.append(gt_binary)
+                            pr_binary_all.append(pr_binary)
+                        else:
+                            gt_binary = [1 if temp_class in gt.split("___") else 0 for temp_class in list_class_names]
+                            pr_binary = [1 if temp_class in pr.split("___") else 0 for temp_class in list_class_names]
+
+                            gt_binary_no_nan.append(gt_binary)
+                            pr_binary_no_nan.append(pr_binary)
+                            gt_binary_all.append(gt_binary)
+                            pr_binary_all.append(pr_binary)
+
+                    pred_no_nan_whole_var = []
+                    gt_no_nan_whole_var = []
+                    pred_all_whole_var = []
+                    gt_all_whole_var = []
+                    for class_ind, class_name in enumerate(list_class_names):
+                        if len(gt_binary_no_nan) > 0:
+                            ground_truth = np.asarray(gt_binary_no_nan)[:, class_ind]
+                            prediction = np.asarray(pr_binary_no_nan)[:, class_ind]
+                            if np.sum(ground_truth) + np.sum(prediction) > 1:
+                                wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                                 prediction=prediction,
+                                                                 list_class_names=list(["no_" + class_name, class_name]),
+                                                                 prefix_plot=taskname + "_binary_" + class_name,
+                                                                 res_folder_name=self.result_dir)
+                                pred_no_nan_whole_var.append(prediction)
+                                gt_no_nan_whole_var.append(ground_truth)
+                            else:
+                                print("(binary) ground truth and predictions do not contain the class: ", class_name)
+                        else:
+                            print("no evaluation for the binary classification of", class_name, "for the variable",
+                                  taskname,
+                                  "possible, as there are no predictions for no class of that variable; "
+                                  "all sigmoid activation were smaller than the selected threshold.")
+
+                        ground_truth_all = np.asarray(gt_binary_all)[:, class_ind]
+                        prediction_all = np.asarray(pr_binary_all)[:, class_ind]
+                        if np.sum(ground_truth_all) + np.sum(prediction_all) > 1:
+                            wp4lib.estimate_quality_measures(ground_truth=ground_truth_all,
+                                                             prediction=prediction_all,
+                                                             list_class_names=list(["no_" + class_name, class_name]),
+                                                             prefix_plot=taskname + "_binary_" + class_name + "_all",
+                                                             res_folder_name=self.result_dir)
+                            pred_all_whole_var.append(prediction_all)
+                            gt_all_whole_var.append(ground_truth_all)
+                        else:
+                            print("(binary all) ground truth and predictions do not contain the class: ", class_name)
+
+                    wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_no_nan_whole_var),
+                                                     prediction=np.hstack(pred_no_nan_whole_var),
+                                                     list_class_names=list(["not_class" , "class"]),
+                                                     prefix_plot=taskname + "_binary_whole_var",
+                                                     res_folder_name=self.result_dir)
+                    wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_all_whole_var),
+                                                     prediction=np.hstack(pred_all_whole_var),
+                                                     list_class_names=list(["not_class" , "class"]),
+                                                     prefix_plot=taskname + "_binary_whole_var_all",
+                                                     res_folder_name=self.result_dir)
+                else:
+                    ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
+                    prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+                    wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                     prediction=prediction,
+                                                     list_class_names=list(list_class_names),
+                                                     prefix_plot=taskname,
+                                                     res_folder_name=self.result_dir)
 
         return groundtruth, predictions
 
@@ -641,13 +788,113 @@ class SilkClassifier:
             gtvar = gtvar[nan_mask]
             prvar = prvar[nan_mask]
 
-            ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
-            prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
-            wp4lib.estimate_quality_measures(ground_truth=ground_truth,
-                                             prediction=prediction,
-                                             list_class_names=list(list_class_names),
-                                             prefix_plot=taskname,
-                                             res_folder_name=self.log_dir_cv)
+            # prepare predictions and groundtruth according to multi-class and multi-label classification
+            if self.multiLabelsListOfVariables is None:
+                ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
+                prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+                wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                 prediction=prediction,
+                                                 list_class_names=list(list_class_names),
+                                                 prefix_plot=taskname,
+                                                 res_folder_name=self.log_dir_cv)
+            else:
+                if taskname in self.multiLabelsListOfVariables:
+                    gt_binary_no_nan = []
+                    pr_binary_no_nan = []
+                    gt_binary_all = []
+                    pr_binary_all = []
+                    for gt, pr in zip(gtvar, prvar):
+                        if "nan_OR_" in pr:
+                            gt_binary = [1 if temp_class in gt.split("___") else 0 for temp_class in list_class_names]
+                            pr_binary = [1 if temp_class == pr.replace("nan_OR_", "") else 0 for temp_class in
+                                         list_class_names]
+                            gt_binary_all.append(gt_binary)
+                            pr_binary_all.append(pr_binary)
+                        else:
+                            gt_binary = [1 if temp_class in gt.split("___") else 0 for temp_class in list_class_names]
+                            pr_binary = [1 if temp_class in pr.split("___") else 0 for temp_class in list_class_names]
+
+                            gt_binary_no_nan.append(gt_binary)
+                            pr_binary_no_nan.append(pr_binary)
+                            gt_binary_all.append(gt_binary)
+                            pr_binary_all.append(pr_binary)
+
+                    pred_no_nan_whole_var = []
+                    gt_no_nan_whole_var = []
+                    pred_all_whole_var = []
+                    gt_all_whole_var = []
+                    for class_ind, class_name in enumerate(list_class_names):
+                        if len(gt_binary_no_nan) > 0:
+                            ground_truth = np.asarray(gt_binary_no_nan)[:, class_ind]
+                            prediction = np.asarray(pr_binary_no_nan)[:, class_ind]
+                            if np.sum(ground_truth) + np.sum(prediction) > 1:
+                                wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                                 prediction=prediction,
+                                                                 list_class_names=list(
+                                                                     ["no_" + class_name, class_name]),
+                                                                 prefix_plot=taskname + "_binary_" + class_name,
+                                                                 res_folder_name=self.log_dir_cv)
+                                pred_no_nan_whole_var.append(prediction)
+                                gt_no_nan_whole_var.append(ground_truth)
+                            else:
+                                print("(binary) ground truth and predictions do not contain the class: ", class_name)
+                        else:
+                            print("no evaluation for the binary classification of", class_name, "for the variable",
+                                  taskname,
+                                  "possible, as there are no predictions for no class of that variable; "
+                                  "all sigmoid activation were smaller than the selected threshold.")
+
+                        ground_truth_all = np.asarray(gt_binary_all)[:, class_ind]
+                        prediction_all = np.asarray(pr_binary_all)[:, class_ind]
+                        if np.sum(ground_truth_all) + np.sum(prediction_all) > 1:
+                            wp4lib.estimate_quality_measures(ground_truth=ground_truth_all,
+                                                             prediction=prediction_all,
+                                                             list_class_names=list(["no_" + class_name, class_name]),
+                                                             prefix_plot=taskname + "_binary_" + class_name + "_all",
+                                                             res_folder_name=self.log_dir_cv)
+                            pred_all_whole_var.append(prediction_all)
+                            gt_all_whole_var.append(ground_truth_all)
+                        else:
+                            print("(binary all) ground truth and predictions do not contain the class: ", class_name)
+
+                    wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_no_nan_whole_var),
+                                                     prediction=np.hstack(pred_no_nan_whole_var),
+                                                     list_class_names=list(["not_class", "class"]),
+                                                     prefix_plot=taskname + "_binary_whole_var",
+                                                     res_folder_name=self.log_dir_cv)
+                    wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_all_whole_var),
+                                                     prediction=np.hstack(pred_all_whole_var),
+                                                     list_class_names=list(["not_class", "class"]),
+                                                     prefix_plot=taskname + "_binary_whole_var_all",
+                                                     res_folder_name=self.log_dir_cv)
+                else:
+                    ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
+                    prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+                    wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+                                                     prediction=prediction,
+                                                     list_class_names=list(list_class_names),
+                                                     prefix_plot=taskname,
+                                                     res_folder_name=self.log_dir_cv)
+
+        # for task_ind, classlist in enumerate(label2class_list):
+        #     taskname = classlist[0]
+        #     list_class_names = np.asarray(classlist[1:])
+        #
+        #     # sort out nans
+        #     gtvar = np.squeeze(groundtruth[:, task_ind])
+        #     prvar = np.squeeze(predictions[:, task_ind])
+        #     nan_mask = np.squeeze(gtvar != 'nan')
+        #
+        #     gtvar = gtvar[nan_mask]
+        #     prvar = prvar[nan_mask]
+        #
+        #     ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
+        #     prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+        #     wp4lib.estimate_quality_measures(ground_truth=ground_truth,
+        #                                      prediction=prediction,
+        #                                      list_class_names=list(list_class_names),
+        #                                      prefix_plot=taskname,
+        #                                      res_folder_name=self.log_dir_cv)
 
     def trainWithDomainCheck(self):
         """Trains a new classifier.
@@ -669,13 +916,15 @@ class SilkClassifier:
                                            masterfile_name=self.masterfile_name,
                                            relevant_variables=self.relevant_variables,
                                            image_based_samples=self.image_based_samples,
-                                           validation_percentage=self.validation_percentage)
+                                           validation_percentage=self.validation_percentage,
+                                           multiLabelsListOfVariables=self.multiLabelsListOfVariables)
 
         self.samplehandlerTarget = SampleHandler(masterfile_dir=self.masterfile_dir,
                                                  masterfile_name=self.masterfileTarget,
                                                  relevant_variables=self.relevant_variables,
                                                  image_based_samples=self.image_based_samples,
-                                                 validation_percentage=100.)
+                                                 validation_percentage=100.,
+                                                 multiLabelsListOfVariables=self.multiLabelsListOfVariables)
 
         # Setup graph
         module_spec = hub.load_module_spec(str(self.tfhub_module))
@@ -712,12 +961,12 @@ class SilkClassifier:
                 augmented_image_tensor = wp4lib.add_data_augmentation(self.aug_set_dict, decoded_image_tensor)
 
             # Merge all the summaries and write them out to the logpath
-            merged = tf.summary.merge_all()
+            merged = tf.compat.v1.summary.merge_all()
             train_writer = tf.summary.FileWriter(self.log_dir + '/train', sess.graph)
 
             # Create a train saver that is used to restore values into an eval graph
             # when exporting models.
-            train_saver = tf.train.Saver()
+            train_saver = tf.compat.v1.train.Saver()
 
             # after all bottlenecks are cached, the collections_dict_train will
             # be renamed to collections_dict, if a validation is desired
@@ -853,13 +1102,13 @@ class SilkClassifier:
         # TODO: Re-implement finetuning for ResNet
 
         # 'outdated'' finetuning-code
-        with tf.variable_scope("moduleLayers"):
-            input_image_tensor = tf.placeholder(tf.float32, [None, height, width, 3], name="input_img")
+        with tf.compat.v1.variable_scope("moduleLayers"):
+            input_image_tensor = tf.compat.v1.placeholder(tf.float32, [None, height, width, 3], name="input_img")
             m = hub.Module(module_spec)
             bottleneck_tensor = m(input_image_tensor)
 
             # get scope/names of variables from layers that will be retrained
-            module_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='moduleLayers')
+            module_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='moduleLayers')
             pre_names = '/'.join(module_vars[0].name.split('/')[:3])
             module_vars_names = np.asarray([v.name.split('/')[3] for v in module_vars])[::-1]
 
@@ -871,25 +1120,35 @@ class SilkClassifier:
             self.trainable_variables = []
             for v in range(self.num_finetune_layers):
                 self.trainable_variables.extend(
-                    tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,
-                                      scope=pre_names + '/' + unique_module_vars_names[v]))
+                    tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES,
+                                                scope=pre_names + '/' + unique_module_vars_names[v]))
 
         return input_image_tensor, bottleneck_tensor
 
     def add_MTL_graph(self, bottleneck_tensor):
         """Adds the classification networks for multitask learning."""
-        with tf.variable_scope("customLayers"):
+        with tf.compat.v1.variable_scope("customLayers"):
             ground_truth_list = []
             batch_size, bottleneck_tensor_size = bottleneck_tensor.get_shape().as_list()
             assert batch_size is None, 'We want to work with arbitrary batch size.'
             with tf.name_scope('input'):
                 for MTL_task in self.samplehandler.classCountDict.keys():
-                    ground_truth_input = tf.placeholder(
-                        tf.int64, [batch_size], name='GroundTruthInput' + MTL_task)
+                    if self.multiLabelsListOfVariables is None:  # one label indice per sample
+                        ground_truth_input = tf.compat.v1.placeholder(
+                            tf.int64, [batch_size], name='GroundTruthInput' + MTL_task)
+                    else:  # one-/multi-hot-encoding of the labels
+                        if MTL_task in self.multiLabelsListOfVariables:
+                            ground_truth_input = tf.compat.v1.placeholder(
+                                tf.int64, [batch_size, self.samplehandler.numClassPerTask[MTL_task]],
+                                name='GroundTruthInputMultiLabel' + MTL_task)
+                        else:
+                            ground_truth_input = tf.compat.v1.placeholder(
+                                tf.int64, [batch_size, self.samplehandler.numClassPerTask[MTL_task]],
+                                name='GroundTruthInputMultiClass' + MTL_task)
                     ground_truth_list.append(ground_truth_input)
                 ground_truth_MTL = tuple(ground_truth_list)
                 for MTL_ind, MTL_key in enumerate(self.samplehandler.classCountDict.keys()):
-                    tf.summary.histogram("class_distribution" + MTL_key, ground_truth_MTL[MTL_ind])
+                    tf.compat.v1.summary.histogram("class_distribution" + MTL_key, ground_truth_MTL[MTL_ind])
 
             # 1.3 Initializer for the layer weights
             init = tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
@@ -898,9 +1157,9 @@ class SilkClassifier:
             #     domain.
             # 2.2 Create one classification network per classification task
 
-            with tf.variable_scope("joint_layers_MTL"):
-                dropout_rate_input_tensor = tf.placeholder_with_default(tf.constant(0.), shape=[],
-                                                                        name="dropout_rate_input")
+            with tf.compat.v1.variable_scope("joint_layers_MTL"):
+                dropout_rate_input_tensor = tf.compat.v1.placeholder_with_default(tf.constant(0.), shape=[],
+                                                                                  name="dropout_rate_input")
                 bottleneck_tensor = tf.nn.dropout(bottleneck_tensor, rate=dropout_rate_input_tensor,
                                                   name="dropout_layer")
 
@@ -926,17 +1185,26 @@ class SilkClassifier:
                 "num_task_stop_gradient has to be smaller or equal to the number of tasks!"
             if self.num_task_stop_gradient < 0: self.num_task_stop_gradient = len(
                 self.samplehandler.classCountDict.keys())
-            count_incomplete = tf.fill(tf.shape(ground_truth_MTL[0]), 0.0)
-            for MTL_ind, MTL_task in enumerate(self.samplehandler.classCountDict.keys()):
-                temp_labels = ground_truth_MTL[MTL_ind]
-                temp_zero = tf.fill(tf.shape(temp_labels), 0.0)
-                temp_one = tf.fill(tf.shape(temp_labels), 1.0)
-                temp_incomplete = tf.where(tf.equal(temp_labels, -1), temp_one, temp_zero)
-                count_incomplete = count_incomplete + temp_incomplete
+            if self.multiLabelsListOfVariables is None:  # label indices, nan=-1
+                count_incomplete = tf.fill(tf.shape(ground_truth_MTL[0]), 0.0)
+                for MTL_ind, MTL_task in enumerate(self.samplehandler.classCountDict.keys()):
+                    temp_labels = ground_truth_MTL[MTL_ind]
+                    temp_zero = tf.fill(tf.shape(temp_labels), 0.0)
+                    temp_one = tf.fill(tf.shape(temp_labels), 1.0)
+                    temp_incomplete = tf.where(tf.equal(temp_labels, -1), temp_one, temp_zero)
+                    count_incomplete = count_incomplete + temp_incomplete
+            else:  # one-/multi-hot encoded labels, nan=zeros-vector
+                count_incomplete = tf.fill([tf.shape(ground_truth_MTL[0])[0]], 0.0)
+                for MTL_ind, MTL_task in enumerate(self.samplehandler.classCountDict.keys()):
+                    temp_labels = ground_truth_MTL[MTL_ind]
+                    temp_zero = tf.fill([tf.shape(ground_truth_MTL[0])[0]], 0.0)
+                    temp_one = tf.fill([tf.shape(ground_truth_MTL[0])[0]], 1.0)
+                    temp_incomplete = tf.where(tf.equal(tf.math.reduce_sum(temp_labels, -1), 0), temp_one, temp_zero)
+                    count_incomplete = count_incomplete + temp_incomplete
             mask_contribute = tf.math.greater_equal(tf.cast(self.num_task_stop_gradient, tf.float32), count_incomplete)
 
             for MTL_ind, MTL_task in enumerate(self.samplehandler.classCountDict.keys()):
-                with tf.variable_scope("stop_incomplete_gradient_" + MTL_task):
+                with tf.compat.v1.variable_scope("stop_incomplete_gradient_" + MTL_task):
                     # For each task, split complete from incomplete samples. That way
                     # the gradient can be stopped for incomplete samples so that they won't
                     # contribute to the update of the joint fc layer(s)
@@ -945,8 +1213,8 @@ class SilkClassifier:
                     contrib_samples = tf.where(mask_contribute, joint_fc, temp_zero)
                     nocontrib_samples = tf.stop_gradient(tf.where(mask_contribute, temp_zero, joint_fc))
                     joint_fc_ = contrib_samples + nocontrib_samples
-                    tf.summary.histogram('activations_FC_contribute_' + str(MTL_task), contrib_samples)
-                    tf.summary.histogram('activations_FC_nocontribute_' + str(MTL_task), nocontrib_samples)
+                    tf.compat.v1.summary.histogram('activations_FC_contribute_' + str(MTL_task), contrib_samples)
+                    tf.compat.v1.summary.histogram('activations_FC_nocontribute_' + str(MTL_task), nocontrib_samples)
 
                 if MTL_task == "museum":
                     print("Gradient Reversal will be applied to museum branch!")
@@ -958,21 +1226,35 @@ class SilkClassifier:
                                           kernel_initializer=init,
                                           activation=tf.nn.relu,
                                           name='1st_fc_layer_' + str(MTL_task))
+                # consider only single label classes in the logits
+                num_logits = len(self.samplehandler.classPerTaskDict[MTL_task])
                 logits_0 = tf.layers.dense(inputs=dense_0,
-                                           units=len(self.samplehandler.classCountDict[MTL_task]),
+                                           units=num_logits,
                                            use_bias=True,
                                            kernel_initializer=init,
                                            activation=None,
                                            name='2nd_fc_layer_' + str(
                                                MTL_task) + '_' + str(
-                                               len(self.samplehandler.classCountDict[MTL_task])) + '_classes')
-                final_tensor_0 = tf.nn.softmax(logits_0,
-                                               name=self.final_tensor_name + '_' + str(MTL_task))
+                                               num_logits) + '_classes')
+                # all mutli-class
+                if self.multiLabelsListOfVariables is None:
+                    final_tensor_0 = tf.nn.softmax(logits_0,
+                                                   name=self.final_tensor_name + '_' + str(MTL_task))
+                # multi-class or multi-label
+                else:
+                    # multi-label
+                    if MTL_task in self.multiLabelsListOfVariables:
+                        final_tensor_0 = tf.math.sigmoid(logits_0,
+                                                         name=self.final_tensor_name + '_' + str(MTL_task))
+                    # multi-class
+                    else:
+                        final_tensor_0 = tf.nn.softmax(logits_0,
+                                                       name=self.final_tensor_name + '_' + str(MTL_task))
                 print("Final Tensor:", self.final_tensor_name + '_' + str(MTL_task))
                 final_tensor_MTL.append(final_tensor_0)
                 logits_MTL.append(logits_0)
 
-                tf.summary.histogram('activations_' + str(MTL_task), final_tensor_0)
+                tf.compat.v1.summary.histogram('activations_' + str(MTL_task), final_tensor_0)
 
             final_tensor_MTL = tf.tuple(final_tensor_MTL, name=self.final_tensor_name)
             logits_MTL = tuple(logits_MTL)
@@ -988,18 +1270,19 @@ class SilkClassifier:
 
     # TODO: Optimierer um self.trainable_variables erweitern?
     def addOptimizer(self, loss):
-        self.trainable_variables.extend(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='customLayers'))
+        self.trainable_variables.extend(
+            tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='customLayers'))
         with tf.name_scope('L2-Loss'):
             lossL2 = tf.reduce_mean([tf.nn.l2_loss(v) for v in self.trainable_variables if 'bias' not in v.name])
         loss = loss + lossL2 * self.weight_decay
 
         with tf.name_scope('optimizer'):
-            optimizer = tf.train.AdamOptimizer(self.learning_rate)
+            optimizer = tf.compat.v1.train.AdamOptimizer(self.learning_rate)
             grad_var_list = optimizer.compute_gradients(loss,
                                                         tf.trainable_variables())
             for (grad, var) in grad_var_list:
-                tf.summary.histogram(var.name + '/gradient', grad)
-                tf.summary.histogram(var.op.name, var)
+                tf.compat.v1.summary.histogram(var.name + '/gradient', grad)
+                tf.compat.v1.summary.histogram(var.op.name, var)
             train_step = optimizer.apply_gradients(grad_var_list)
 
         return train_step, loss

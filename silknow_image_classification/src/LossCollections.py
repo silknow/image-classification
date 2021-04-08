@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 
-
 def getLossFunction(nameOfLossFunction, lossParameters):
     """Creates and returns a loss function with specific parameters.
         :Arguments:
@@ -33,15 +32,76 @@ def getLossFunction(nameOfLossFunction, lossParameters):
     elif nameOfLossFunction == "sce":
         lossFunction = softmaxCrossEntropyLoss
 
+    elif nameOfLossFunction == "mixed_sce":
+        lossFunction = mixedSoftmaxSigmoidCrossEntropyLoss
+
     else:
         raise Exception("The chosen loss function %s is not available!" % nameOfLossFunction)
 
     return lossFunction
 
+
 def createInstanceOfFocalLossFunction(gamma):
     """Creates a focal loss function with a set gamma"""
-    func = lambda gt, lg, ccd: focalLoss(gt,lg, ccd, gamma)
+    func = lambda gt, lg, ccd: focalLoss(gt, lg, ccd, gamma)
     return func
+
+
+def mixedSoftmaxSigmoidCrossEntropyLoss(groundtruth, logits, boolSigmoidActivation):
+    """Computes the cross entropy for multitask learning.
+
+    :Arguments:
+        :groundtruth (*tuple*)\::
+            Tuple with ground truth for each sample.
+        :logits (*tuple*)\::
+            Tuple with predicted classes for each sample.
+        :boolSigmoidActivation (*dict*)\::
+            boolSigmoidActivation[task]==True; mutli-label classification with Sigmoid activation.
+            boolSigmoidActivation[task]==False; mutli-class classification with Softmax activation.
+        :kwargs:
+            Additional keyword arguments. Can be ignored for this function.
+
+    :Returns:
+        :cross_entropy_MTL:
+            The cross entropy loss
+    """
+    all_cross_entropy = []
+    tensor_created = False
+    for MTL_ind in range(np.shape(groundtruth)[0]):
+        boolSigmoid = boolSigmoidActivation[list(boolSigmoidActivation.keys())[MTL_ind]]
+        temp_labels_one_hot = groundtruth[MTL_ind]
+        temp_logits = logits[MTL_ind]
+
+        if boolSigmoid:
+            temp_cross_entropy = tf.compat.v1.losses.sigmoid_cross_entropy(
+                multi_class_labels=temp_labels_one_hot,
+                logits=temp_logits,
+                reduction=tf.losses.Reduction.NONE)
+            temp_cross_entropy_bs = tf.compat.v1.reduce_sum(temp_cross_entropy, -1)
+        else:
+            temp_cross_entropy_bs = tf.compat.v1.losses.softmax_cross_entropy(
+                onehot_labels=temp_labels_one_hot,
+                logits=temp_logits,
+                reduction=tf.losses.Reduction.NONE)
+
+        temp_cross_entropy = tf.reduce_sum(temp_cross_entropy_bs) / tf.cast(tf.shape(temp_labels_one_hot)[0],
+                                                                            tf.float32)
+        temp_cross_entropy = tf.reshape(temp_cross_entropy, [])
+
+        # Set Cross Entropy to 0 when no labels are available for current batch and task
+        temp_cross_entropy = tf.cond(tf.shape(temp_labels_one_hot)[0] < 1,
+                                     lambda: 0.,
+                                     lambda: temp_cross_entropy)
+
+        all_cross_entropy.append(temp_cross_entropy)
+
+        tf.summary.scalar("crossEntropyLoss/" + list(boolSigmoidActivation.keys())[MTL_ind],
+                          temp_cross_entropy)
+
+    cross_entropy_MTL = tf.reduce_sum(all_cross_entropy)
+    tf.summary.scalar('total_cross_entropy_loss', cross_entropy_MTL)
+    return cross_entropy_MTL
+
 
 def softmaxCrossEntropyLoss(groundtruth, logits, classCountDict):
     """Computes the cross entropy for multitask learning.
@@ -100,6 +160,7 @@ def softmaxCrossEntropyLoss(groundtruth, logits, classCountDict):
     tf.summary.scalar('total_cross_entropy_loss', cross_entropy_MTL)
     return cross_entropy_MTL
 
+
 def focalLoss(groundtruth, logits, classCountDict, gamma):
     """Computes the focal loss for multitask learning.
 
@@ -138,7 +199,6 @@ def focalLoss(groundtruth, logits, classCountDict, gamma):
         classWeights = 1. / np.array(list(taskClassCountDict.values()))
         modulatingFactors = tf.pow(1. - softmaxProbability, gamma)
         focalWeights = tf.multiply(tf.cast(classWeights, tf.float32), tf.cast(modulatingFactors, tf.float32))
-
 
         temp_labels_one_hot = tf.one_hot(indices=temp_labels,
                                          depth=len(taskClassCountDict),

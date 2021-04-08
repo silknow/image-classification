@@ -429,6 +429,7 @@ def convertToImageBasedDataframe(dataframe):
                     row.material_group,
                     row.technique_group,
                     row.depict_group] for URL in row.deeplink if not URL == 'nan']
+        # totallist += varlist
         if isinstance(row.category_group, str):
             if row.category_group == "fabrics":
                 totallist += varlist
@@ -723,7 +724,7 @@ def writeCollectionFiles(dataChunkList, masterfileDirectory, imageSaveDirectory,
 
             string = [(str(row[label]) + "\t") for label in variable_list]
 
-            collection.writelines([r"../" + imageSaveDirectory + r"img/" + imagefile] + string + ["\n"])
+            collection.writelines([os.path.relpath(imageSaveDirectory, masterfileDirectory) + r"/img/" + imagefile] + string + ["\n"])
 
         collection.close()
 

@@ -4,81 +4,73 @@ from . import silk_classification_class as scc
 from . import DatasetCreation
 
 
-def create_dataset_from_csv_parameter(rawCSVFile, imageSaveDirectory, masterfileDirectory,
-                                      minNumSamplesPerClass, retainCollections, minNumLabelsPerSample,
-                                      flagDownloadImages, flagRescaleImages, fabricListFile):
+def create_dataset_from_csv_parameter(csvfile, imgsavepath, master_file_dir,
+                                      minnumsamples, retaincollections, num_labeled,
+                                      multi_label_variables=None):
     """Creates a dataset
 
     :Arguments\::
-        :rawCSVFile (*string*)\::
+        :csvfile (*string*)\::
             Path including the filename of the csv file containing the data
             exported from the SILKNOW knowledge graph (by EURECOM) or to
             data that is structured in the same way. An example is given in
             https://github.com/silknow/image-classification/tree/master/silknow_image_classification/samples.
-        :imageSaveDirectory (*string*)\::
+        :imgsavepath (*string*)\::
             Path to were the images shall be downloaded or were the beforehand
             downloaded images are stored. All images in the csv file (rawCSVFile)
             that fulfill the further user-defined requirements are considered,
             i.e. images in that director that are not part of the csv file won't be considered.
             All images have to be in the folder; subfolders are not considered.
-        :masterfileDirectory (*string*)\::
+        :master_file_dir (*string*)\::
             Path where the created master file will be stored. The master file contains all
             created collection files. These collection files contain the relative paths
             from masterfileDirectory to the images in imageSaveDirectory as well as the
             images' annotations.
-        :minNumSamplesPerClass (*int*)\::
+        :minnumsamples (*int*)\::
             The minimum number of images that shall contribute to a certain class.
             Classes (e.g. Italy) with less than minNumSamplesPerClass samples are not considered
             for the variable (e.g. place) with that class (e.g. Italy), i.e. the class label is set
             to 'nan' (unknown).
-        :retainCollections (*list of strings*)\::
+        :retaincollections (*list of strings*)\::
             A list of the names of the museums in the csv file that shall be considered
             for the dataset creation.
-        :minNumLabelsPerSample (*int*)\::
+        :num_labeled (*int*)\::
             The minimum number of labels that shall be available for a sample. If a sample
             has less labels, it won't be part of the created dataset. This number of labels is counted
             after potentially setting labels to 'nan' (unknown) due to the restrictions in
             minNumSamplesPerClass. The maximum number of labels is 5 in the current software
             implementation, i.e. one label for each of the five semantic variables
             (relevant_variables in other functions of silknow_image_classification).
-        :flagDownloadImages (*bool*)\::
-            Flags wheter the found images in the rawCSVFile shall be downloaded. For the
-            subsequent functions it is mandatory to have all images contributing to a dataset
-            downloaded. Setting this Variable to False is useful to avoid re-downloading
-            in case of changed dataset requirements.
-        :flagRescaleImages (*bool*)\::
-            Flags whether the downloaded images shall be rescaled (smaller side will have 448 pixel
-            in the current implementation). This enables to use more data in training
-            as all images for training are loaded beforehand into the RAM. The CNN
-            needs images of the size 224 x 224 so that (due to Gaussian blur before scaling)
-            no information is lost. There is also some buffer for cropping.
-        :fabricListFile (*string*)\::
-            Optional! This is the filename of a texfile located in the masterfileDirectory
-            that lists all images (according to the image identifyer specified in D4.4) that
-            depict useful fabrics for the silknow_image_classification.
+        :multi_label_variables (*list of strings*)\::
+            A list of the SILKNOW knowledge graph names of the five semantic variables that
+            have multiple class labels per variable to be used in subsequent functions. A complete list
+            would be ["material_group", "place_country_code", "time_label", "technique_group",
+            "depict_group"].
 
     :Returns\::
         No returns. This function produces all files needed for running the subsequent software.
     """
-    DatasetCreation.createDataset(rawCSVFile = rawCSVFile,
-              imageSaveDirectory = imageSaveDirectory,
-              masterfileDirectory=masterfileDirectory,
-               minNumSamplesPerClass = minNumSamplesPerClass,
-               retainCollections = retainCollections,
-               minNumLabelsPerSample = minNumLabelsPerSample,
-               flagDownloadImages = flagDownloadImages,
-               flagRescaleImages = flagRescaleImages,
-               fabricListFile=fabricListFile)
+    DatasetCreation.createDataset(rawCSVFile = csvfile,
+                                  imageSaveDirectory=imgsavepath,
+                                  masterfileDirectory=master_file_dir,
+                                  minNumSamplesPerClass=minnumsamples,
+                                  retainCollections=retaincollections,
+                                  minNumLabelsPerSample=num_labeled,
+                                  flagDownloadImages=True,
+                                  flagRescaleImages=True,
+                                  fabricListFile=None,
+                                  multiLabelsListOfVariables=multi_label_variables)
 
-def train_model_parameter(masterfile_name, masterfile_dir, log_dir,
-                          num_joint_fc_layer,
+def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc_layer,
                           num_nodes_joint_fc, num_finetune_layers,
                           relevant_variables, batchsize,
                           how_many_training_steps, how_often_validation,
                           validation_percentage, learning_rate,
                           weight_decay, num_task_stop_gradient,
-                          aug_set_dict, image_based_samples, dropout_rate,
-                          nameOfLossFunction, lossParameters = {}):
+                          random_crop, random_rotation90, gaussian_noise,
+                          flip_left_right, flip_up_down,
+                          image_based_samples, dropout_rate,
+                          nameOfLossFunction, multi_label_variables, lossParameters = {}):
     """Trains a new classifier.
 
         :Arguments\::
@@ -111,9 +103,20 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir,
             :num_task_stop_gradient (int)\::
                 Samples with up to num_task_stop_gradient missing labels are used for training the joint layer.
                 Samples with more missing labels will only be used for training the task-specific branches.
-            :aug_set_dict (int)\::
-                Dictionary defining the data augmentation. See SILKNOW_WP4_library.add_data_augmentation() for
-                full documentation.
+            :random_crop (*list*)\::
+                Range of float fractions for centrally cropping the image. The crop fraction
+                is drawn out of the provided range [lower bound, upper bound],
+                i.e. the first and second values of random_crop. If [0.8, 0.9] is given,
+                a crop fraction of e.g. 0.85 is drawn meaning that the crop for an image with
+                the dimensions 200 x 400 pixels consists of the 170 x 340 central pixels.
+            :random_rotation90 (*bool*)\::
+                Data augmentation: should rotations by 90° be used (True) or not (False)?
+            :gaussian_noise (*float*)\::
+                Data augmentation: Standard deviation of the Gaussian noise
+            :flip_left_right (*bool*)\::
+                Data augmentation: should horizontal flips be used (True) or not (False)?
+            :flip_up_down (*bool*)\::
+                Data augmentation: should vertical flips be used (True) or not (False)?.
             :image_based_samples (bool)\::
                 Has to be True if the collection files state image based samples (i.e. one image per sample).
                 Has to be False if the collection files state record based samples (i.e. multiple images per sample).
@@ -121,8 +124,20 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir,
                 Value between 0 and 1 that defines the probability of randomly dropping activations between the
                 pretrained feature extractor and the fully connected layers.
             :nameOfLossFunction (bool)\::
-                Indicates the loss function that shall be used.
-                Available functions are listed in LossCollections.py.
+                Indicates the loss function that shall be used:
+                    - If "sce": Softmax cross entropy loss for multi-task learning with incomplete samples.
+                    (Note: both single-task learning and the complete samples case are special cases of "sce")
+                    - If "focal": Focal softmax cross entropy loss for multi-task learning with incomplete samples.
+                    (Note: both single-task learning and the complete samples case are special cases of "focal")
+                    - If "mixed_sce": Softmax cross entropy loss (for variables listed in relevant_variables, but
+                    not in multi_label_variables) combined with Sigmoid cross entropy loss
+                    (for variables listed both in relevant_variables and multi_label_variables) for
+                    multi-task learning with incomplete samples.
+                    (Note: both single-task learning and the complete samples case are special cases of "mixed_sce")
+            :multi_label_variables (*list of strings*)\::
+                A list of variable names of the five semantic variables (relevant_variables) that
+                have multiple class labels per variable to be used. A complete list
+                would be ["material", "place", "timespan", "technique", "depiction"].
             :lossParameters (bool)\::
                 Indicates (optional) parameters for the chosen loss function.
                 Specifications can be found in LossCollections.py.
@@ -151,32 +166,25 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir,
     sc.learning_rate = learning_rate
     sc.weight_decay = weight_decay
     sc.num_task_stop_gradient = num_task_stop_gradient
-    sc.aug_set_dict = aug_set_dict
     sc.dropout_rate = dropout_rate
     sc.nameOfLossFunction = nameOfLossFunction
     sc.lossParameters = lossParameters
 
+    sc.aug_set_dict['random_crop'] = random_crop
+    sc.aug_set_dict['random_rotation90'] = random_rotation90
+    sc.aug_set_dict['gaussian_noise'] = gaussian_noise
+    sc.aug_set_dict['flip_left_right'] = flip_left_right
+    sc.aug_set_dict['flip_up_down'] = flip_up_down
+
     sc.image_based_samples = image_based_samples
+    sc.multiLabelsListOfVariables = multi_label_variables
 
     # call main function
     sc.train_model()
 
 
-# def train_model_configfile(configfile):
-#     """Trains a CNN-classifier
-#     """
-#     # create new classifier object
-#     sc = scc.SilkClassifier()
-#
-#     # set parameters
-#     sc.read_configfile(configfile)
-#
-#     # call main function
-#     sc.train_model()
-
-
 def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result_dir, bool_unlabeled_dataset = None,
-                              image_based_samples=True):
+                              image_based_samples=True, multi_label_variables=None, sigmoid_activation_thresh=0.5):
     """Classifies images.
 
     :Arguments\::
@@ -192,6 +200,16 @@ def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result
         :image_based_samples (bool)\::
             Has to be True if the collection files state image based samples (i.e. one image per sample).
             Has to be False if the collection files state record based samples (i.e. multiple images per sample).
+        :multi_label_variables (*list of strings*)\::
+            A list of variable names of the five semantic variables (relevant_variables) that
+            have multiple class labels per variable to be used. A complete list
+            would be ["material", "place", "timespan", "technique", "depiction"].
+            This list has to match the list in multi_label_variables that was used for the training
+            of the selected model in model_dir.
+        :sigmoid_activation_thresh (*float*)\::
+            Only if multi_label_variables is not None.
+            A float threshold defining the minimum value of the sigmoid activation in case of a
+            multi-label classification that a class needs to have to be predicted.
 
 
     :Returns\::
@@ -208,25 +226,14 @@ def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result
     sc.bool_unlabeled_dataset = bool_unlabeled_dataset
 
     sc.image_based_samples = image_based_samples
+    sc.multiLabelsListOfVariables = multi_label_variables
+    sc.sigmoid_activation_thresh=sigmoid_activation_thresh
 
     # call main function
     sc.classify_images()
 
 
-# def classify_images_configfile(configfile):
-#     """Classifies images
-#     """
-#     # create new classifier object
-#     sc = scc.SilkClassifier()
-#
-#     # set parameters
-#     sc.read_configfile(configfile)
-#
-#     # call main function
-#     sc.classify_images()
-
-
-def evaluate_model_parameter(pred_gt_dir, result_dir):
+def evaluate_model_parameter(pred_gt_dir, result_dir, multi_label_variables=None):
     """Evaluates a model
 
     :Arguments\::
@@ -235,6 +242,12 @@ def evaluate_model_parameter(pred_gt_dir, result_dir):
             classify_images_parameter).
         :result_dir (*string*)\::
             Directory where the evaluation results will be stored.
+        :multi_label_variables (*list of strings*)\::
+            A list of variable names of the five semantic variables (relevant_variables) that
+            have multiple class labels per variable to be used. A complete list
+            would be ["material", "place", "timespan", "technique", "depiction"].
+            This list has to match the list in multi_label_variables that was used for the training
+            of the selected model to be evaluated.
 
     :Returns\::
         No returns.
@@ -245,33 +258,18 @@ def evaluate_model_parameter(pred_gt_dir, result_dir):
     # set parameters
     sc.pred_gt_dir = pred_gt_dir
     sc.result_dir = result_dir
+    sc.multiLabelsListOfVariables = multi_label_variables
 
     # call main function
     sc.evaluate_model()
 
 
-# def evaluate_model_configfile(configfile):
-#     """Evaluates a model
-#     """
-#     # create new classifier object
-#     sc = scc.SilkClassifier()
-#
-#     # set parameters
-#     sc.read_configfile(configfile)
-#
-#     # call main function
-#     sc.evaluate_model()
-
-
-def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir,
-                          num_joint_fc_layer,
-                          num_nodes_joint_fc, num_finetune_layers,
-                          relevant_variables, batchsize,
-                          how_many_training_steps, how_often_validation,
-                          validation_percentage, learning_rate,
-                          weight_decay, num_task_stop_gradient, aug_set_dict,
-                          image_based_samples, dropout_rate, nameOfLossFunction,
-                          lossParameters = {}):
+def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir, num_finetune_layers,
+                              relevant_variables, batchsize,
+                              how_many_training_steps, how_often_validation,
+                              validation_percentage, learning_rate, random_crop, random_rotation90, gaussian_noise,
+                              flip_left_right, dropout_rate,
+                              flip_up_down, nameOfLossFunction, multi_label_variables, sigmoid_activation_thresh):
     """Perform 5-fold crossvalidation
 
     :Arguments\::
@@ -299,14 +297,20 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir,
             Percentage of training samples that will be used for validation.
         :learning_rate (float)\::
             Learning rate.
-        :weight_decay (float)\::
-            Factor for the L2-loss of the weights.
-        :num_task_stop_gradient (int)\::
-            Samples with up to num_task_stop_gradient missing labels are used for training the joint layer.
-            Samples with more missing labels will only be used for training the task-specific branches.
-        :aug_set_dict (int)\::
-            Dictionary defining the data augmentation. See SILKNOW_WP4_library.add_data_augmentation() for
-            full documentation.
+        :random_crop (*list*)\::
+            Range of float fractions for centrally cropping the image. The crop fraction
+            is drawn out of the provided range [lower bound, upper bound],
+            i.e. the first and second values of random_crop. If [0.8, 0.9] is given,
+            a crop fraction of e.g. 0.85 is drawn meaning that the crop for an image with
+            the dimensions 200 x 400 pixels consists of the 170 x 340 central pixels.
+        :random_rotation90 (*bool*)\::
+            Data augmentation: should rotations by 90° be used (True) or not (False)?
+        :gaussian_noise (*float*)\::
+            Data augmentation: Standard deviation of the Gaussian noise
+        :flip_left_right (*bool*)\::
+            Data augmentation: should horizontal flips be used (True) or not (False)?
+        :flip_up_down (*bool*)\::
+            Data augmentation: should vertical flips be used (True) or not (False)?.
         :image_based_samples (bool)\::
             Has to be True if the collection files state image based samples (i.e. one image per sample).
             Has to be False if the collection files state record based samples (i.e. multiple images per sample).
@@ -316,9 +320,14 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir,
         :nameOfLossFunction (bool)\::
             Indicates the loss function that shall be used.
             Available functions are listed in LossCollections.py.
-        :lossParameters (bool)\::
-            Indicates (optional) parameters for the chosen loss function.
-            Specifications can be found in LossCollections.py.
+        :multi_label_variables (*list of strings*)\::
+            A list of variable names of the five semantic variables (relevant_variables) that
+            have multiple class labels per variable to be used. A complete list
+            would be ["material", "place", "timespan", "technique", "depiction"].
+        :sigmoid_activation_thresh (*float*)\::
+            Only if multi_label_variables is not None.
+            A float threshold defining the minimum value of the sigmoid activation in case of a
+            multi-label classification that a class needs to have to be predicted.
 
     :Returns\::
         No returns.
@@ -331,8 +340,8 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir,
     sc.masterfile_dir = masterfile_dir
     sc.log_dir_cv = log_dir
 
-    sc.num_joint_fc_layer = num_joint_fc_layer
-    sc.num_nodes_joint_fc = num_nodes_joint_fc
+    sc.num_joint_fc_layer = 1
+    sc.num_nodes_joint_fc = 1500
     sc.num_finetune_layers = num_finetune_layers
     sc.dropout_rate = dropout_rate
 
@@ -342,29 +351,24 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir,
     sc.how_often_validation = how_often_validation
     sc.validation_percentage = validation_percentage
     sc.learning_rate = learning_rate
-    sc.weight_decay = weight_decay
-    sc.num_task_stop_gradient = num_task_stop_gradient
-    sc.aug_set_dict = aug_set_dict
-    sc.nameOfLossFunction = nameOfLossFunction
-    sc.lossParameters = lossParameters
+    sc.weight_decay = 1e-3
+    sc.num_task_stop_gradient = -1
 
-    sc.image_based_samples = image_based_samples
+    sc.aug_set_dict['random_crop'] = random_crop
+    sc.aug_set_dict['random_rotation90'] = random_rotation90
+    sc.aug_set_dict['gaussian_noise'] = gaussian_noise
+    sc.aug_set_dict['flip_left_right'] = flip_left_right
+    sc.aug_set_dict['flip_up_down'] = flip_up_down
+
+    sc.nameOfLossFunction = nameOfLossFunction
+    sc.lossParameters = {}
+
+    sc.image_based_samples = True
+    sc.multiLabelsListOfVariables = multi_label_variables
+    sc.sigmoid_activation_thresh=sigmoid_activation_thresh
 
     # call main function
     sc.crossvalidation()
-
-
-# def crossvalidation_configfile(configfile):
-#     """Perform 5-fold crossvalidation
-#     """
-#     # create new classifier object
-#     sc = scc.SilkClassifier()
-#
-#     # set parameters
-#     sc.read_configfile(configfile)
-#
-#     # call main function
-#     sc.crossvalidation()
 
 
 # def trainWithDomainCheck(masterfile_name, masterfile_dir, log_dir,
