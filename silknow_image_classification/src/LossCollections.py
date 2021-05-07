@@ -1,6 +1,10 @@
 import numpy as np
 import tensorflow as tf
 
+
+# https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
+# tf.nn.sigmoid_cross_entropy_with_logits(    labels=None, logits=None, name=None)
+
 def getLossFunction(nameOfLossFunction, lossParameters):
     """Creates and returns a loss function with specific parameters.
         :Arguments:

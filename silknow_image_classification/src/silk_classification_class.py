@@ -157,6 +157,8 @@ class SilkClassifier:
 
         self.sigmoid_activation_thresh = 0.5
 
+        self.restriction_Anne = False
+
         # Augmentation
         self.aug_set_dict = {}
 
@@ -178,7 +180,7 @@ class SilkClassifier:
         assert 0 <= self.validation_percentage <= 100, "Validation Percentage has to be between 0 and 100!"
         if (self.multiLabelsListOfVariables is None and self.nameOfLossFunction == "mixed_sce") \
                 or (not self.multiLabelsListOfVariables is None and self.nameOfLossFunction != "mixed_sce"):
-            print("Either pass multi-label variables or set the loss to mixed_sce.")
+            print("Either pass multi-label variables or set the loss to mixed_sce. Multi_label variables has to be None for all nameOfLossFunction != mixed_sce.")
             sys.exit(-1)
 
         if not os.path.exists(os.path.join(self.log_dir, r"")): os.makedirs(os.path.join(self.log_dir, r""))
@@ -613,6 +615,9 @@ class SilkClassifier:
             if self.multiLabelsListOfVariables is None:
                 ground_truth = np.squeeze([np.where(gt == list_class_names) for gt in gtvar])
                 prediction = np.squeeze([np.where(pr == list_class_names) for pr in prvar])
+                if len(np.unique(ground_truth)) < len(list_class_names):
+                    list_class_names = [name for name in list_class_names if
+                                        list(list_class_names).index(name) in np.unique(ground_truth)]
                 wp4lib.estimate_quality_measures(ground_truth=ground_truth,
                                                  prediction=prediction,
                                                  list_class_names=list(list_class_names),
@@ -620,6 +625,12 @@ class SilkClassifier:
                                                  res_folder_name=self.result_dir)
             else:
                 if taskname in self.multiLabelsListOfVariables:
+                    # TODO: to be added to retrieval
+                    wp4lib.create_multi_label_rectangle_confusion_matrix(groundtruth=gtvar,
+                                                                         predictions=prvar,
+                                                                         taskname=taskname,
+                                                                         task_dict=task_dict,
+                                                                         result_dir=self.result_dir)
                     gt_binary_no_nan = []
                     pr_binary_no_nan = []
                     gt_binary_all = []
@@ -651,7 +662,8 @@ class SilkClassifier:
                             if np.sum(ground_truth) + np.sum(prediction) > 1:
                                 wp4lib.estimate_quality_measures(ground_truth=ground_truth,
                                                                  prediction=prediction,
-                                                                 list_class_names=list(["no_" + class_name, class_name]),
+                                                                 list_class_names=list(
+                                                                     ["no_" + class_name, class_name]),
                                                                  prefix_plot=taskname + "_binary_" + class_name,
                                                                  res_folder_name=self.result_dir)
                                 pred_no_nan_whole_var.append(prediction)
@@ -679,12 +691,12 @@ class SilkClassifier:
 
                     wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_no_nan_whole_var),
                                                      prediction=np.hstack(pred_no_nan_whole_var),
-                                                     list_class_names=list(["not_class" , "class"]),
+                                                     list_class_names=list(["not_class", "class"]),
                                                      prefix_plot=taskname + "_binary_whole_var",
                                                      res_folder_name=self.result_dir)
                     wp4lib.estimate_quality_measures(ground_truth=np.hstack(gt_all_whole_var),
                                                      prediction=np.hstack(pred_all_whole_var),
-                                                     list_class_names=list(["not_class" , "class"]),
+                                                     list_class_names=list(["not_class", "class"]),
                                                      prefix_plot=taskname + "_binary_whole_var_all",
                                                      res_folder_name=self.result_dir)
                 else:
@@ -799,6 +811,11 @@ class SilkClassifier:
                                                  res_folder_name=self.log_dir_cv)
             else:
                 if taskname in self.multiLabelsListOfVariables:
+                    wp4lib.create_multi_label_rectangle_confusion_matrix(groundtruth=gtvar,
+                                                                         predictions=prvar,
+                                                                         taskname=taskname,
+                                                                         task_dict=task_dict,
+                                                                         result_dir=self.log_dir_cv)
                     gt_binary_no_nan = []
                     pr_binary_no_nan = []
                     gt_binary_all = []
@@ -1220,12 +1237,16 @@ class SilkClassifier:
                     print("Gradient Reversal will be applied to museum branch!")
                     joint_fc_ = self.gradientReversal(joint_fc_)
 
-                dense_0 = tf.layers.dense(inputs=joint_fc_,
-                                          units=100,
-                                          use_bias=True,
-                                          kernel_initializer=init,
-                                          activation=tf.nn.relu,
-                                          name='1st_fc_layer_' + str(MTL_task))
+                if self.restriction_Anne:
+                    dense_0 = joint_fc_
+                else:
+                    dense_0 = tf.layers.dense(inputs=joint_fc_,
+                                              units=100,
+                                              use_bias=True,
+                                              kernel_initializer=init,
+                                              activation=tf.nn.relu,
+                                              name='1st_fc_layer_' + str(MTL_task))
+
                 # consider only single label classes in the logits
                 num_logits = len(self.samplehandler.classPerTaskDict[MTL_task])
                 logits_0 = tf.layers.dense(inputs=dense_0,

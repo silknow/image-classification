@@ -4,48 +4,50 @@ from . import silk_classification_class as scc
 from . import DatasetCreation
 
 
-def create_dataset_from_csv_parameter(csvfile, imgsavepath, master_file_dir,
-                                      minnumsamples, retaincollections, num_labeled,
-                                      multi_label_variables=None):
+def create_dataset_parameter(csvfile,
+                             imgsavepath,
+                             master_file_dir,
+                             minnumsamples=150,
+                             retaincollections=['cer', 'garin', 'imatex', 'joconde', 'mad', 'met',
+                                                'mfa', 'mobilier', 'mtmad', 'paris-musees', 'risd',
+                                                'smithsonian', 'unipa', 'vam', 'venezia', 'versailles'],
+                             num_labeled=1,
+                             multi_label_variables=["material"]):
     """Creates a dataset
 
     :Arguments\::
         :csvfile (*string*)\::
-            Path including the filename of the csv file containing the data
-            exported from the SILKNOW knowledge graph (by EURECOM) or to
-            data that is structured in the same way. An example is given in
-            https://github.com/silknow/image-classification/tree/master/silknow_image_classification/samples.
+            The name (including the path) of the CSV file containing the data exported from the SILKNOW knowledge graph.
         :imgsavepath (*string*)\::
-            Path to were the images shall be downloaded or were the beforehand
-            downloaded images are stored. All images in the csv file (rawCSVFile)
-            that fulfill the further user-defined requirements are considered,
-            i.e. images in that director that are not part of the csv file won't be considered.
-            All images have to be in the folder; subfolders are not considered.
+            The path to the directory that will contain the downloaded images. The original images will be downloaded
+            to the folder img_unscaled in that directory and the rescaled images (the smaller side will be 448 pixels)
+            will be saved to the folder img. It has to be relative to the current working directory.
         :master_file_dir (*string*)\::
-            Path where the created master file will be stored. The master file contains all
-            created collection files. These collection files contain the relative paths
-            from masterfileDirectory to the images in imageSaveDirectory as well as the
-            images' annotations.
+            Directory where the collection files and masterfile will be created. The storage location can now be chosen
+            by the user.
         :minnumsamples (*int*)\::
-            The minimum number of images that shall contribute to a certain class.
-            Classes (e.g. Italy) with less than minNumSamplesPerClass samples are not considered
-            for the variable (e.g. place) with that class (e.g. Italy), i.e. the class label is set
-            to 'nan' (unknown).
+            The minimum number of samples that has to be available for a single class or, in case the parameter
+            multi_label_variables is not None, for every class combination for the variables contained in that list.
+            The dataset is restricted to class combinations that occur at least minnumsamples times in the dataset
+            exported from the knowledge graph. Classes or class combinations with fewer samples will not be considered
+            in the generated dataset.
         :retaincollections (*list of strings*)\::
-            A list of the names of the museums in the csv file that shall be considered
-            for the dataset creation.
+            A list containing the museums/collections in the knowledge graph that shall be considered for the data set
+            creation. Data from museums/collections not stated in this list will be omitted. Possible values in the list
+            according to EURECOM’s export from the SILKNOW knowledge graph (19.02.2021) are: cer, garin, imatex,
+            joconde, mad, met, mfa, mobilier, mtmad, paris-musee, risd, smithsonian, unipa, vam, venezia, versailles.
         :num_labeled (*int*)\::
-            The minimum number of labels that shall be available for a sample. If a sample
-            has less labels, it won't be part of the created dataset. This number of labels is counted
-            after potentially setting labels to 'nan' (unknown) due to the restrictions in
-            minNumSamplesPerClass. The maximum number of labels is 5 in the current software
-            implementation, i.e. one label for each of the five semantic variables
-            (relevant_variables in other functions of silknow_image_classification).
+            A variable that indicates how many labels per sample should be available so that a sample is a valid sample
+            and thus, part of the created dataset. The maximum value is 5, as five semantic variables are considered in
+            the current implementation of this function. Choosing this maximum number means that only complete samples
+            will form the dataset, while choosing a value of 0 means that records without annotations will also be
+            considered. The value of num_labeled must not be smaller than 0.
         :multi_label_variables (*list of strings*)\::
-            A list of the SILKNOW knowledge graph names of the five semantic variables that
-            have multiple class labels per variable to be used in subsequent functions. A complete list
-            would be ["material_group", "place_country_code", "time_label", "technique_group",
-            "depict_group"].
+            A list of keywords indicating those among the five semantic variables in the input CSV file (see csvfile)
+            that may have multiple class labels per variable to be predicted. A complete list would be ["material",
+            "place", "timespan", "technique", "depiction"]. If the value is None, all variables will have mutually
+            exclusive labels, i.e. the generated dataset will not contain any samples with a class combination as a
+            label.
 
     :Returns\::
         No returns. This function produces all files needed for running the subsequent software.
@@ -61,48 +63,52 @@ def create_dataset_from_csv_parameter(csvfile, imgsavepath, master_file_dir,
                                   fabricListFile=None,
                                   multiLabelsListOfVariables=multi_label_variables)
 
-def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc_layer,
-                          num_nodes_joint_fc, num_finetune_layers,
-                          relevant_variables, batchsize,
-                          how_many_training_steps, how_often_validation,
-                          validation_percentage, learning_rate,
-                          weight_decay, num_task_stop_gradient,
-                          random_crop, random_rotation90, gaussian_noise,
-                          flip_left_right, flip_up_down,
-                          image_based_samples, dropout_rate,
-                          nameOfLossFunction, multi_label_variables, lossParameters = {}):
+def train_model_parameter(masterfile_name,
+                          masterfile_dir,
+                          log_dir,
+                          num_finetune_layers=5,
+                          relevant_variables=["material", "timespan", "technique", "depiction", "place"],
+                          batchsize=300,
+                          how_many_training_steps=500,
+                          how_often_validation=10,
+                          validation_percentage=25,
+                          learning_rate=1e-3,
+                          random_crop=[1., 1.],
+                          random_rotation90=False,
+                          gaussian_noise=0.0,
+                          flip_left_right=False,
+                          flip_up_down=False,
+                          weight_decay=1e-3,
+                          nameOfLossFunction="focal",
+                          multi_label_variables=None,
+                          num_joint_fc_layer=1,
+                          num_nodes_joint_fc=1500):
     """Trains a new classifier.
 
         :Arguments\::
             :masterfile_name (*string*)\::
-                Filename of the masterfile which states the collection files used for training and validation.
+                Name of the master file that lists the collection files with the available samples that will be used
+                for training the CNN. This file has to exist in directory master_dir.
             :masterfile_dir (*string*)\::
-                Directory where the masterfile is stored.
+                Path to the directory containing the master file.
             :log_dir (*string*)\::
-                Directory where the trained CNN will be stored.
-            :num_joint_fc_layer (int)\::
-                Number of joint fully connected layers.
-            :num_nodes_joint_fc (int)\::
-                Number of nodes in each joint fully connected layer.
+                Path to the directory to which the trained model and the log files will be saved.
             :num_finetune_layers (int)\::
-                Number of layers of the pretrained feature extraction network that will be finetuned.
+                Number of residual blocks (each containing 3 convo- lutional layers) of ResNet 152 that shall be
+                retrained.
             :relevant_variables (list)\::
-                List of strings that defines the relevant variables.
+                A list containing the names of the variables to be learned. These names have to be those (or a subset
+                of those) listed in the header sections of the collection files collection_n.txt.
             :batchsize (int)\::
-                Number of samples per training iteration.
+                Number of samples that are used during each training iteration.
             :how_many_training_steps (int)\::
                 Number of training iterations.
             :how_often_validation (int)\::
-                Number of training iterations between validation steps.
+                Number of training iterations between two computations of the validation loss.
             :validation_percentage (int)\::
-                Percentage of training samples that will be used for validation.
+                Percentage of training samples that are used for validation. The value has to be in the range [0, 100).
             :learning_rate (float)\::
-                Learning rate.
-            :weight_decay (float)\::
-                Factor for the L2-loss of the weights.
-            :num_task_stop_gradient (int)\::
-                Samples with up to num_task_stop_gradient missing labels are used for training the joint layer.
-                Samples with more missing labels will only be used for training the task-specific branches.
+                Learning rate for the training procedure.
             :random_crop (*list*)\::
                 Range of float fractions for centrally cropping the image. The crop fraction
                 is drawn out of the provided range [lower bound, upper bound],
@@ -117,12 +123,8 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc
                 Data augmentation: should horizontal flips be used (True) or not (False)?
             :flip_up_down (*bool*)\::
                 Data augmentation: should vertical flips be used (True) or not (False)?.
-            :image_based_samples (bool)\::
-                Has to be True if the collection files state image based samples (i.e. one image per sample).
-                Has to be False if the collection files state record based samples (i.e. multiple images per sample).
-            :dropout_rate (float)\::
-                Value between 0 and 1 that defines the probability of randomly dropping activations between the
-                pretrained feature extractor and the fully connected layers.
+            :weight_decay (float)\::
+                Weight of the regularization term in the loss function.
             :nameOfLossFunction (bool)\::
                 Indicates the loss function that shall be used:
                     - If "sce": Softmax cross entropy loss for multi-task learning with incomplete samples.
@@ -135,12 +137,13 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc
                     multi-task learning with incomplete samples.
                     (Note: both single-task learning and the complete samples case are special cases of "mixed_sce")
             :multi_label_variables (*list of strings*)\::
-                A list of variable names of the five semantic variables (relevant_variables) that
-                have multiple class labels per variable to be used. A complete list
-                would be ["material", "place", "timespan", "technique", "depiction"].
-            :lossParameters (bool)\::
-                Indicates (optional) parameters for the chosen loss function.
-                Specifications can be found in LossCollections.py.
+                A list of those among the variables to be predicted (cf. relevant_variables) that may have multiple
+                class labels per variable to be used in subsequent functions. A complete list would be ["material",
+                "place", "timespan", "technique", "depiction"].
+            :num_nodes_joint_fc (int)\::
+                Number of nodes in each joint fully connected layer.
+            :num_finetune_layers (int)\::
+                Number of joint fully connected layers.
 
         :Returns\::
             No returns. This function produces all files needed for running the software.
@@ -165,10 +168,10 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc
     sc.validation_percentage = validation_percentage
     sc.learning_rate = learning_rate
     sc.weight_decay = weight_decay
-    sc.num_task_stop_gradient = num_task_stop_gradient
-    sc.dropout_rate = dropout_rate
+    sc.num_task_stop_gradient = -1
+    sc.dropout_rate = 0.1
     sc.nameOfLossFunction = nameOfLossFunction
-    sc.lossParameters = lossParameters
+    sc.lossParameters = {}
 
     sc.aug_set_dict['random_crop'] = random_crop
     sc.aug_set_dict['random_rotation90'] = random_rotation90
@@ -176,41 +179,46 @@ def train_model_parameter(masterfile_name, masterfile_dir, log_dir, num_joint_fc
     sc.aug_set_dict['flip_left_right'] = flip_left_right
     sc.aug_set_dict['flip_up_down'] = flip_up_down
 
-    sc.image_based_samples = image_based_samples
+    sc.image_based_samples = True
     sc.multiLabelsListOfVariables = multi_label_variables
 
     # call main function
     sc.train_model()
 
 
-def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result_dir, bool_unlabeled_dataset = None,
-                              image_based_samples=True, multi_label_variables=None, sigmoid_activation_thresh=0.5):
+def classify_images_parameter(masterfile_name,
+                              masterfile_dir,
+                              model_dir,
+                              result_dir,
+                              multi_label_variables=None,
+                              sigmoid_activation_thresh=0.5):
     """Classifies images.
 
     :Arguments\::
         :masterfile_name (*string*)\::
-            Filename of the masterfile which states the collection files used for training and validation.
+            Name of the master file that lists the collection files with the available samples that will be classified
+            by the trained CNN in model_dir. This file has to exist in directory master_dir.
         :masterfile_dir (*string*)\::
-            Directory where the masterfile is stored.
+            Path to the directory containing the master file master_file_name.
         :model_dir (*string*)\::
-            Directory where the trained CNN will is stored. It is identical to log_dir in the
-            training function.
+            Path to the directory with the trained model to be used for the classification. This directory is
+            equivalent to log_dir in the function crossvalidation_parameter.
         :result_dir (*string*)\::
-            Directory where the results of the performed classification will be stored.
-        :image_based_samples (bool)\::
-            Has to be True if the collection files state image based samples (i.e. one image per sample).
-            Has to be False if the collection files state record based samples (i.e. multiple images per sample).
+            Path to the directory to which the classification results will be saved. This directory is equivalent to
+            log_dir in the function crossvalidation_parameter.
         :multi_label_variables (*list of strings*)\::
-            A list of variable names of the five semantic variables (relevant_variables) that
-            have multiple class labels per variable to be used. A complete list
-            would be ["material", "place", "timespan", "technique", "depiction"].
-            This list has to match the list in multi_label_variables that was used for the training
-            of the selected model in model_dir.
+            A list of variable names of the semantic variables that have multiple class labels per variable to be used.
+            A complete list would be ["material", "place", "timespan", "technique", "depiction"]. The performed
+            classification of variables listed in this parameter is a multi-label classification where one binary
+            classification per class is performed. All classes with a sigmoid activation larger than
+            sigmoid_activation_thresh are part of the prediction.
+            Note that this parameter setting has to be the same as the setting of multi_label_variables in the function
+            train_model_parmeter at training time of the CNN that is loaded via model_dir!
         :sigmoid_activation_thresh (*float*)\::
-            Only if multi_label_variables is not None.
-            A float threshold defining the minimum value of the sigmoid activation in case of a
-            multi-label classification that a class needs to have to be predicted.
-
+            This variable is a float threshold defining the minimum value of the sigmoid activation in case of a
+            multi-label classification that a class needs to have to be predicted. It is 0.5 per default in case that
+            the user does not change the value. This parameter is only used, if multi_label_variables is different from
+            None.
 
     :Returns\::
         No returns. This function produces all files needed for running the subsequent software.
@@ -223,9 +231,9 @@ def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result
     sc.masterfile_dir = masterfile_dir
     sc.model_dir = model_dir
     sc.result_dir = result_dir
-    sc.bool_unlabeled_dataset = bool_unlabeled_dataset
+    sc.bool_unlabeled_dataset = True
 
-    sc.image_based_samples = image_based_samples
+    sc.image_based_samples = True
     sc.multiLabelsListOfVariables = multi_label_variables
     sc.sigmoid_activation_thresh=sigmoid_activation_thresh
 
@@ -233,21 +241,23 @@ def classify_images_parameter(masterfile_name, masterfile_dir, model_dir, result
     sc.classify_images()
 
 
-def evaluate_model_parameter(pred_gt_dir, result_dir, multi_label_variables=None):
+def evaluate_model_parameter(pred_gt_dir,
+                             result_dir,
+                             multi_label_variables=None):
     """Evaluates a model
 
     :Arguments\::
         :pred_gt_dir (*string*)\::
-            Directory containing the results of the classification function (result_dir in
-            classify_images_parameter).
+            Path to the directory where the classification results to be evaluated are saved. This directory is
+            equivalent to log_dir in the function crossvalidation_parameter.
         :result_dir (*string*)\::
-            Directory where the evaluation results will be stored.
+            Path to the directory to which the evaluation results will be saved. This directory is equivalent to
+            log_dir in the function crossvalidation_parameter.
         :multi_label_variables (*list of strings*)\::
-            A list of variable names of the five semantic variables (relevant_variables) that
-            have multiple class labels per variable to be used. A complete list
-            would be ["material", "place", "timespan", "technique", "depiction"].
-            This list has to match the list in multi_label_variables that was used for the training
-            of the selected model to be evaluated.
+            A list of variable names of the semantic variables that have multiple class labels per variable to be used.
+            A complete list would be ["material", "place", "timespan", "technique", "depiction"]. This list has to be
+            identical to the one used in the function classify_model_parmeter at the time of the classification that
+            produced the predictions in pred_gt_dir.
 
     :Returns\::
         No returns.
@@ -264,39 +274,57 @@ def evaluate_model_parameter(pred_gt_dir, result_dir, multi_label_variables=None
     sc.evaluate_model()
 
 
-def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir, num_finetune_layers,
-                              relevant_variables, batchsize,
-                              how_many_training_steps, how_often_validation,
-                              validation_percentage, learning_rate, random_crop, random_rotation90, gaussian_noise,
-                              flip_left_right, dropout_rate,
-                              flip_up_down, nameOfLossFunction, multi_label_variables, sigmoid_activation_thresh):
+def crossvalidation_parameter(masterfile_name,
+                              masterfile_dir,
+                              log_dir,
+                              num_finetune_layers=5,
+                              relevant_variables=["material", "timespan", "technique", "depiction", "place"],
+                              batchsize=300,
+                              how_many_training_steps=500,
+                              how_often_validation=10,
+                              validation_percentage=25,
+                              learning_rate=1e-3,
+                              random_crop=[1., 1.],
+                              random_rotation90=False,
+                              gaussian_noise=0.0,
+                              flip_left_right=False,
+                              flip_up_down=False,
+                              weight_decay=1e-3,
+                              nameOfLossFunction="focal",
+                              multi_label_variables=None,
+                              num_joint_fc_layer=1,
+                              num_nodes_joint_fc=1500,
+                              sigmoid_activation_thresh=0.5):
     """Perform 5-fold crossvalidation
 
     :Arguments\::
         :masterfile_name (*string*)\::
-            Filename of the masterfile which states the collection files used for training and validation.
+            Name of the master file that lists the collection files with the available samples that will be used
+            for training the CNN. This file has to exist in directory master_dir.
         :masterfile_dir (*string*)\::
-            Directory where the masterfile is stored.
+            Path to the directory containing the master file.
         :log_dir (*string*)\::
-            Directory where the trained CNN will be stored.
+            Path to the directory to which the output files will be saved.
         :num_joint_fc_layer (int)\::
             Number of joint fully connected layers.
         :num_nodes_joint_fc (int)\::
             Number of nodes in each joint fully connected layer.
         :num_finetune_layers (int)\::
-            Number of layers of the pretrained feature extraction network that will be finetuned.
+            Number of residual blocks (each containing 3 convo- lutional layers) of ResNet 152 that shall be
+                retrained.
         :relevant_variables (list)\::
-            List of strings that defines the relevant variables.
+            A list containing the names of the variables to be learned. These names have to be those (or a subset
+                of those) listed in the header sections of the collection files collection_n.txt.
         :batchsize (int)\::
-            Number of samples per training iteration.
+            Number of samples that are used during each training iteration.
         :how_many_training_steps (int)\::
             Number of training iterations.
         :how_often_validation (int)\::
-            Number of training iterations between validation steps.
+            Number of training iterations between two computations of the validation loss.
         :validation_percentage (int)\::
-            Percentage of training samples that will be used for validation.
+            Percentage of training samples that are used for validation. The value has to be in the range [0, 100).
         :learning_rate (float)\::
-            Learning rate.
+            Learning rate for the training procedure.
         :random_crop (*list*)\::
             Range of float fractions for centrally cropping the image. The crop fraction
             is drawn out of the provided range [lower bound, upper bound],
@@ -311,23 +339,28 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir, num_fine
             Data augmentation: should horizontal flips be used (True) or not (False)?
         :flip_up_down (*bool*)\::
             Data augmentation: should vertical flips be used (True) or not (False)?.
-        :image_based_samples (bool)\::
-            Has to be True if the collection files state image based samples (i.e. one image per sample).
-            Has to be False if the collection files state record based samples (i.e. multiple images per sample).
-        :dropout_rate (float)\::
-            Value between 0 and 1 that defines the probability of randomly dropping activations between the
-            pretrained feature extractor and the fully connected layers.
+        :weight_decay (float)\::
+            Weight of the regularization term in the loss function.
         :nameOfLossFunction (bool)\::
-            Indicates the loss function that shall be used.
-            Available functions are listed in LossCollections.py.
+            Indicates the loss function that shall be used:
+                - If "sce": Softmax cross entropy loss for multi-task learning with incomplete samples.
+                (Note: both single-task learning and the complete samples case are special cases of "sce")
+                - If "focal": Focal softmax cross entropy loss for multi-task learning with incomplete samples.
+                (Note: both single-task learning and the complete samples case are special cases of "focal")
+                - If "mixed_sce": Softmax cross entropy loss (for variables listed in relevant_variables, but
+                not in multi_label_variables) combined with Sigmoid cross entropy loss
+                (for variables listed both in relevant_variables and multi_label_variables) for
+                multi-task learning with incomplete samples.
+                (Note: both single-task learning and the complete samples case are special cases of "mixed_sce")
         :multi_label_variables (*list of strings*)\::
-            A list of variable names of the five semantic variables (relevant_variables) that
-            have multiple class labels per variable to be used. A complete list
-            would be ["material", "place", "timespan", "technique", "depiction"].
+            A list of those among the variables to be predicted (cf. relevant_variables) that may have multiple
+            class labels per variable to be used in subsequent functions. A complete list would be ["material",
+            "place", "timespan", "technique", "depiction"].
         :sigmoid_activation_thresh (*float*)\::
-            Only if multi_label_variables is not None.
-            A float threshold defining the minimum value of the sigmoid activation in case of a
-            multi-label classification that a class needs to have to be predicted.
+            This variable is a float threshold defining the minimum value of the sigmoid activation in case of a
+            multi-label classification that a class needs to have to be predicted. It is 0.5 per default in case that
+            the user does not change the value. This parameter is only used, if multi_label_variables is different from
+            None.
 
     :Returns\::
         No returns.
@@ -340,10 +373,10 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir, num_fine
     sc.masterfile_dir = masterfile_dir
     sc.log_dir_cv = log_dir
 
-    sc.num_joint_fc_layer = 1
-    sc.num_nodes_joint_fc = 1500
+    sc.num_joint_fc_layer = num_joint_fc_layer
+    sc.num_nodes_joint_fc = num_nodes_joint_fc
     sc.num_finetune_layers = num_finetune_layers
-    sc.dropout_rate = dropout_rate
+    sc.dropout_rate = 0.1
 
     sc.relevant_variables = relevant_variables
     sc.batchsize = batchsize
@@ -351,7 +384,7 @@ def crossvalidation_parameter(masterfile_name, masterfile_dir, log_dir, num_fine
     sc.how_often_validation = how_often_validation
     sc.validation_percentage = validation_percentage
     sc.learning_rate = learning_rate
-    sc.weight_decay = 1e-3
+    sc.weight_decay = weight_decay
     sc.num_task_stop_gradient = -1
 
     sc.aug_set_dict['random_crop'] = random_crop
