@@ -25,45 +25,37 @@ from . import LossCollections
 # deprecation._PRINT_DEPRECATION_WARNINGS = False
 
 
-class ImportGraph:
+class ImportGraph():
     """  Importing and running isolated TF graph """
 
-    def __init__(self, loc, output_name, task_list):
-        """Creates an object of class ImportGraph
-
-        :Arguments:
-          :loc:
-              The absolute path to the storage location of the trained graph
-            including the name of the graph.
-          :output_name:
-            The name of the output classification layer in the retrained graph.
-            It has to be the same name as it was given in the training.
-        :task_list:
-            Names of the tasks to be considered for the classification. The
-            wanted tasks have to be contained in the label_file, i.e. they must
-            have been considered during training, too. Task names should begin
-            with a # and be separated by commas, e.g. '#timespan, #place'
-
-        :Returns:
-            Object of class ImportGraph
-        """
+    def __init__(self, loc):
         # Create local graph and use it in the session
-        self.graph = tf.Graph()
-        self.sess = tf.compat.v1.Session(graph=self.graph)
-        with self.graph.as_default():
-            # Import saved model from location 'loc' into local graph
-            saver = tf.compat.v1.train.import_meta_graph(loc + 'model.ckpt' + '.meta',
-                                                         clear_devices=True)
-            """EXPERIMENTELL"""
-            init = tf.compat.v1.global_variables_initializer()
-            self.sess.run(init)
-            #            self.sess.run(tf.local_variables_initializer())
-            """EXPERIMENTELL"""
-            saver.restore(self.sess, os.path.join(loc, 'model.ckpt'))
-            self.task_list = task_list
-            self.output_operations = [
-                self.graph.get_operation_by_name('customLayers/' + output_name + '_' + task).outputs[0] for task in
-                task_list]
+        self.multi_label_variables = None
+        self.sess = tf.compat.v1.Session()
+        signature_key = tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY
+
+        input_key = 'x_input'
+        input_key_2 = 'x2_input'
+
+        meta_graph_def = tf.saved_model.loader.load(
+            self.sess,
+            [tf.saved_model.SERVING],
+            os.path.join(loc, "trained_model"))
+        signature = meta_graph_def.signature_def
+
+        self.task_list = []
+        self.classification_tensors = []
+        for key in list(signature[signature_key].outputs.keys()):
+            if key != "y_output":
+                self.classification_tensors.append(signature[signature_key].outputs[key].name)
+                self.task_list.append(key.split("_")[-1])
+        self.class_in_tensors = [signature[signature_key].inputs[key].name for key in
+                                 list(signature[signature_key].inputs.keys()) if "mtl" in key]
+
+        input_tensor_name = signature[signature_key].inputs[input_key].name
+        input2_tensor_name = signature[signature_key].inputs[input_key_2].name
+        self.raw_input_tensor = self.sess.graph.get_tensor_by_name(input_tensor_name)
+        self.input_tensor = self.sess.graph.get_tensor_by_name(input2_tensor_name)
 
     def run(self, data):
         """ Running the activation operation previously imported.
@@ -76,43 +68,28 @@ class ImportGraph:
             :output:
                 The result of the specified layer (output_name).
         """
-        #        # The 'x' corresponds to name of input placeholder
-        #        feed_dict={"moduleLayers/input_img:0": data}
-        #        for task in self.task_list:
-        #            feed_dict['customLayers/input/GroundTruthInput'+task+":0"] = [0.]
-        #        output = self.sess.run(self.output_operations, feed_dict=feed_dict)
-        #        return output
         # The 'x' corresponds to name of input placeholder
-        feed_dict_raw = {"JPG-Decoding/DecodeJPGInput:0": data}
-        decoded_img_op = self.graph.get_operation_by_name('JPG-Decoding/Squeeze').outputs[0]
+        feed_dict_raw = {self.raw_input_tensor: data}
+        decoded_img_op = self.sess.graph.get_operation_by_name('JPG-Decoding/Squeeze').outputs[0]
         decoded_img = self.sess.run(decoded_img_op, feed_dict=feed_dict_raw)
         decoded_img = np.expand_dims(np.asarray(decoded_img), 0)
+        feed_dict_decoded = {self.input_tensor: decoded_img}
 
-        feed_dict_decoded = {"moduleLayers/input_img:0": decoded_img}
-
-        input_tensors = []
-        for task in self.task_list:
+        for gt_tensor, task in zip(self.class_in_tensors, self.task_list):
             try:  # multi-class
-                tensorname = self.graph.get_tensor_by_name('customLayers/input/GroundTruthInput' + task + ":0")
-                feed_dict_decoded['customLayers/input/GroundTruthInput' + task + ":0"] = [0.]
+                feed_dict_decoded[gt_tensor] = [0.]
             except:  # mixed multi-class and multi-label
                 try:  # multi-class (softmax)
-                    tensorname = self.graph.get_tensor_by_name(
-                        'customLayers/input/GroundTruthInputMultiClass' + task + ":0")
-                    feed_dict_decoded['customLayers/input/GroundTruthInputMultiClass' + task + ":0"] = [[0.] *
-                                                                                                        tensorname.shape[
-                                                                                                            -1]]
+                    feed_dict_decoded[gt_tensor] = [[0.] * gt_tensor.shape[-1]]
                 except:  # mutli-label (sigmoid)
-                    tensorname = self.graph.get_tensor_by_name(
-                        'customLayers/input/GroundTruthInputMultiLabel' + task + ":0")
-                    feed_dict_decoded['customLayers/input/GroundTruthInputMultiLabel' + task + ":0"] = [[0.] *
-                                                                                                        tensorname.shape[
-                                                                                                            -1]]
-            input_tensors.append(tensorname)
-        self.input_tensors = input_tensors
+                    if self.multi_label_variables is None:
+                        self.multi_label_variables = [task]
+                    else:
+                        self.multi_label_variables.append(task)
+                    feed_dict_decoded[gt_tensor] = [[0.] * gt_tensor.shape[-1]]
+        activations = self.sess.run(self.classification_tensors, feed_dict=feed_dict_decoded)
 
-        output = self.sess.run(self.output_operations, feed_dict=feed_dict_decoded)
-        return output
+        return activations
 
 
 class SilkClassifier:
@@ -342,6 +319,69 @@ class SilkClassifier:
                 train_saver.save(sess, self.log_dir + '/' + 'model.ckpt')
         # Save task_dict for subsequent functions
         np.savez(self.log_dir + r"/task_dict.npz", self.samplehandler.classPerTaskDict)
+        self.save_final_model()
+
+    def save_final_model(self):
+        save_graph = tf.Graph()
+        save_sess = tf.compat.v1.Session(graph=save_graph)
+        with save_graph.as_default():
+            # load best performing weights
+            saver = tf.compat.v1.train.import_meta_graph(self.log_dir + 'model.ckpt' + '.meta',
+                                                         clear_devices=True)
+            init = tf.compat.v1.global_variables_initializer()
+            save_sess.run(init)
+            saver.restore(save_sess, self.log_dir + 'model.ckpt')
+
+            # prepare inputs
+            x = save_sess.graph.get_tensor_by_name("JPG-Decoding/DecodeJPGInput:0")
+            x2 = save_sess.graph.get_tensor_by_name("moduleLayers/input_img:0")
+            tensor_info_x = tf.saved_model.utils.build_tensor_info(x)
+            tensor_info_x2 = tf.saved_model.utils.build_tensor_info(x2)
+            inputs = {'x_input': tensor_info_x,
+                           'x2_input': tensor_info_x2}
+            task_list = list(self.samplehandler.classPerTaskDict.keys())
+            for task in task_list:
+                try:  # multi-class
+                    cur_in_tensor = save_sess.graph.get_tensor_by_name(
+                        'customLayers/input/GroundTruthInput' + task + ":0")
+                except:  # mixed multi-class and multi-label
+                    try:  # multi-class (softmax)
+                        cur_in_tensor = save_sess.graph.get_tensor_by_name(
+                            'customLayers/input/GroundTruthInputMultiClass' + task + ":0")
+                    except:  # mutli-label (sigmoid)
+                        cur_in_tensor = save_sess.graph.get_tensor_by_name(
+                            'customLayers/input/GroundTruthInputMultiLabel' + task + ":0")
+                cur_in_tensor_info = tf.saved_model.utils.build_tensor_info(cur_in_tensor)
+                inputs["input_mtl_" + task] = cur_in_tensor_info
+
+            # prepare outputs
+            outputs = {}
+            for task in task_list:
+                cur_tensor = save_sess.graph.get_operation_by_name(
+                    'customLayers/' + self.final_tensor_name + '_' + task).outputs[0]
+                cur_tensor_info = tf.saved_model.utils.build_tensor_info(cur_tensor)
+                outputs["output_mtl_" + task] = cur_tensor_info
+
+            # save model
+            trained_model_dir = os.path.join(self.model_dir, "trained_model")
+            if not os._exists(trained_model_dir):
+                os.mkdir(trained_model_dir)
+            builder = tf.compat.v1.saved_model.builder.SavedModelBuilder(trained_model_dir)
+            prediction_signature = (
+                tf.compat.v1.saved_model.signature_def_utils.build_signature_def(
+                    inputs=inputs,
+                    outputs=outputs,
+                    method_name=tf.saved_model.PREDICT_METHOD_NAME))
+            builder.add_meta_graph_and_variables(
+                save_sess, [tf.saved_model.SERVING],
+                signature_def_map={
+                    tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY:
+                        prediction_signature
+                },
+            )
+            builder.save()
+
+            np.savez(self.log_dir + r"/task_dict.npz", self.samplehandler.classPerTaskDict)
 
     def classify_images(self):
         """Uses a trained classifier for prediction.
@@ -358,7 +398,7 @@ class SilkClassifier:
 
         # Load pre-trained network and task_dict
         task_dict = np.load(self.model_dir + r"/task_dict.npz", allow_pickle=True)["arr_0"].item()
-        model = ImportGraph(self.model_dir, 'final_result', task_dict.keys())
+        model = model = ImportGraph(self.model_dir)
         task_list = task_dict.keys()
 
         # TODO: Daten evtl. über Samplehandler machen

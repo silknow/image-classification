@@ -15,3 +15,5 @@ matplotlib
 sklearn
 scipy
 xlsxwriter
+scikit-image
+scikit_learn==0.22.2.post1

@@ -25,11 +25,11 @@ To install clone the repo:
     $ cd ./image-classification
     $ pip install --upgrade .
 
-A pre-trained model that was created using this software can be download from https://doi.org/10.5281/zenodo.4742418. The training of that model is based on the `focal` loss using a mutli-task CNN architecture.
+A pre-trained model that was created using this software can be download from https://doi.org/10.5281/zenodo.5091813. The training of that model is based on the `focal` loss using a mutli-task CNN architecture.
 
 User Guidelines
 -----------------
 
-The user can download the [provided classification model](https://doi.org/10.5281/zenodo.4742418) and directly start to classify new images by means of the function `silknow_image_classification.classify_images_parameter`.
+The user can download the [provided classification model](https://doi.org/10.5281/zenodo.5091813) and directly start to classify new images by means of the function `silknow_image_classification.classify_images_parameter`.
 
 Alternatively, the user can train an own image classification model using the provided software for a subsequent image classification. Therefore, example calls of all functions are provided in [main.py](https://github.com/silknow/image-classification/blob/master/silknow_image_classification/main.py) using the [provided data files](https://github.com/silknow/image-classification/tree/master/silknow_image_classification/samples). These function calls will perform all steps listed in the overview above using the [provided knowledge graph export](https://github.com/silknow/image-classification/blob/master/silknow_image_classification/samples/total_post.csv).
