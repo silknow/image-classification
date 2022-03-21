@@ -193,6 +193,7 @@ def focalLoss(groundtruth, logits, classCountDict, gamma):
         taskGroundtruth = groundtruth[taskIndex]
         taskLogits = logits[taskIndex]
 
+        # refine inputs: Only those with an available class label
         x = tf.fill(tf.shape(taskGroundtruth), False)
         y = tf.fill(tf.shape(taskGroundtruth), True)
         data_gap_ind = tf.where(tf.equal(taskGroundtruth, -1), x, y)
@@ -200,40 +201,44 @@ def focalLoss(groundtruth, logits, classCountDict, gamma):
         temp_logits = tf.boolean_mask(taskLogits, data_gap_ind)
         softmaxProbability = tf.nn.softmax(temp_logits)
 
+        # calculate weights for the softmax activations in the loss
         classWeights = 1. / np.array(list(taskClassCountDict.values()))
         modulatingFactors = tf.pow(1. - softmaxProbability, gamma)
         focalWeights = tf.multiply(tf.cast(classWeights, tf.float32), tf.cast(modulatingFactors, tf.float32))
-
         temp_labels_one_hot = tf.one_hot(indices=temp_labels,
                                          depth=len(taskClassCountDict),
                                          on_value=1.0,
                                          off_value=0.0)
+        focalWeights_final = tf.boolean_mask(focalWeights, temp_labels_one_hot)
 
-        focalWeights = tf.reduce_sum(tf.boolean_mask(focalWeights, temp_labels_one_hot), axis=-1)
-
-        taskFocalLoss = tf.losses.softmax_cross_entropy(
+        # calculate the focal loss of the current task
+        task_cross_entropy = tf.compat.v1.losses.softmax_cross_entropy(
             onehot_labels=temp_labels_one_hot,
             logits=temp_logits,
-            weights=focalWeights,
-            reduction=tf.losses.Reduction.NONE)
+            reduction=tf.compat.v1.losses.Reduction.NONE)
+        taskFocalLoss = tf.map_fn(lambda input_values: tf.math.multiply(input_values[0],
+                                                                        input_values[1]),
+                                  (task_cross_entropy, focalWeights_final),
+                                  dtype=tf.float32)
+        tf.compat.v1.summary.scalar("taskFocalLoss/" + list(classCountDict.keys())[taskIndex],
+                                    tf.reduce_mean(taskFocalLoss))
 
         # reduce to sum and scale by batchsize, because
         # if the current task has a known label for only one sample
         # this sample does not make up the complete loss,
         # but only its proportional fraction from all
         # theoretically available samples
-        taskFocalLoss = tf.reduce_sum(taskFocalLoss) / tf.cast(tf.shape(taskGroundtruth), tf.float32)
-        taskFocalLoss = tf.reshape(taskFocalLoss, [])
+        taskFocalLoss_avg = tf.reduce_sum(taskFocalLoss) / tf.cast(tf.shape(taskGroundtruth), tf.float32)
+
+        taskFocalLoss_reshaped = tf.reshape(taskFocalLoss_avg, [])
 
         # Set Cross Entropy to 0 when no labels are available for current batch and task
-        taskFocalLoss = tf.cond(tf.shape(temp_labels)[0] < 1,
-                                lambda: 0.,
-                                lambda: taskFocalLoss)
+        taskFocalLoss_final = tf.cond(tf.shape(temp_labels)[0] < 1,
+                                      lambda: 0.,
+                                      lambda: taskFocalLoss_reshaped)
+        tf.summary.scalar("focalLoss/" + list(classCountDict.keys())[taskIndex], taskFocalLoss_final)
 
-        totalFocalLoss.append(taskFocalLoss)
-
-        tf.summary.scalar("focalLoss/" + list(classCountDict.keys())[taskIndex],
-                          taskFocalLoss)
+        totalFocalLoss.append(taskFocalLoss_final)
 
     totalFocalLoss = tf.reduce_sum(totalFocalLoss)
     tf.summary.scalar('total_focal_loss', totalFocalLoss)
